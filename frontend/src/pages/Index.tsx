@@ -19,11 +19,33 @@ const Index = () => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [includePostseason, setIncludePostseason] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  const [offset, setOffset] = useState<number>(0);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const PAGE_SIZE = 250;
+  const serverSearch = debouncedSearch.trim().length >= 2 ? debouncedSearch.trim() : "";
+  const isServerSearchActive = serverSearch.length >= 2;
 
-  const { data: playersData, isLoading: playersLoading, refetch } = usePlayers(
+  // Debounce search so we don't hammer /api/players while typing.
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(search), 250);
+    return () => window.clearTimeout(t);
+  }, [search]);
+
+  // Reset paging when filters/search change.
+  useEffect(() => {
+    setOffset(0);
+    setAllPlayers([]);
+    setSelectedPlayer(null);
+  }, [selectedSeason, selectedPosition, selectedTeam, serverSearch]);
+
+  const { data: playersData, isLoading: playersLoading, isFetching: playersFetching, refetch } = usePlayers(
     selectedSeason,
     selectedPosition || undefined,
-    selectedTeam || undefined
+    selectedTeam || undefined,
+    serverSearch || undefined,
+    offset,
+    PAGE_SIZE
   );
 
   async function fetchJson<T>(url: string): Promise<T> {
@@ -43,14 +65,34 @@ const Index = () => {
     enabled: !!selectedPlayer?.player_id && !!selectedSeason,
   });
 
-  const players = useMemo(() => playersData?.players || [], [playersData]);
-  const filteredPlayers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return players;
-    return players.filter((p) => p.player_name.toLowerCase().includes(q));
-  }, [players, search]);
+  // Merge pages (server returns stable objects; de-dupe by player_id just in case).
+  useEffect(() => {
+    const page = playersData?.players || [];
+    if (offset === 0) {
+      setAllPlayers(page);
+      return;
+    }
+    if (page.length === 0) return;
+    setAllPlayers((prev) => {
+      const seen = new Set(prev.map((p) => p.player_id));
+      const next = [...prev];
+      for (const p of page) {
+        if (!seen.has(p.player_id)) {
+          seen.add(p.player_id);
+          next.push(p);
+        }
+      }
+      return next;
+    });
+  }, [playersData?.players, offset]);
 
-  const visiblePlayers = filteredPlayers;
+  const visiblePlayers = useMemo(() => {
+    // When we’re server-searching, the backend already narrowed the list; still apply local filter for niceness.
+    const base = allPlayers;
+    const q = search.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((p) => p.player_name.toLowerCase().includes(q));
+  }, [allPlayers, search]);
 
   const requestedPlayerId = (searchParams.get("player_id") || "").trim();
   const requestedSeason = Number(searchParams.get("season") || "");
@@ -74,11 +116,11 @@ const Index = () => {
   // After players load, select the requested player if present.
   useEffect(() => {
     if (!requestedPlayerId) return;
-    if (players.length === 0) return;
+    if (visiblePlayers.length === 0) return;
     if (selectedPlayer?.player_id === requestedPlayerId) return;
-    const p = players.find((x) => x.player_id === requestedPlayerId);
+    const p = visiblePlayers.find((x) => x.player_id === requestedPlayerId);
     if (p) setSelectedPlayer(p);
-  }, [players, requestedPlayerId, selectedPlayer?.player_id]);
+  }, [visiblePlayers, requestedPlayerId, selectedPlayer?.player_id]);
 
   // Auto-select first player when list changes
   useEffect(() => {
@@ -172,7 +214,8 @@ const Index = () => {
             <div className="opacity-0 animate-fade-in">
               <h2 className="text-lg font-semibold text-foreground mb-1">Players</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                {playersLoading ? 'Loading players...' : `${filteredPlayers.length} players found`}
+                {playersLoading ? 'Loading players...' : `${visiblePlayers.length} players found`}
+                {!playersLoading && playersFetching ? " • updating…" : ""}
               </p>
               <div className="mt-3">
                 <input
@@ -196,12 +239,23 @@ const Index = () => {
                 />
               ))}
               
-              {!playersLoading && filteredPlayers.length === 0 && (
+              {!playersLoading && visiblePlayers.length === 0 && (
                 <div className="glass-card rounded-xl p-8 text-center">
                   <p className="text-muted-foreground">No players found for the selected filters.</p>
                 </div>
               )}
             </div>
+
+            {/* Paging (only when not searching) */}
+            {!playersLoading && !isServerSearchActive && (playersData?.hasMore ?? false) ? (
+              <button
+                type="button"
+                className="w-full h-10 px-3 rounded-lg border border-border bg-transparent text-sm text-foreground hover:bg-secondary transition-colors"
+                onClick={() => setOffset(playersData?.nextOffset ?? offset + PAGE_SIZE)}
+              >
+                Load more
+              </button>
+            ) : null}
           </div>
 
           {/* Main Content */}

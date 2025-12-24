@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
 import re
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Optional
 
 from src.database.supabase_client import SupabaseClient
@@ -86,88 +89,6 @@ def player_photo_url_from_name_team(*, name: str, team: Optional[str]) -> Option
     Uses dynastyprocess db_playerids.csv (already cached in hrb/data/db_playerids.csv).
     Prefers ESPN headshots, falls back to Sleeper.
     """
-    # Lazy import to avoid pandas dependency on cold paths if unused.
-    try:
-        import pandas as pd  # type: ignore
-    except Exception:
-        return None
-
-    from functools import lru_cache
-    from pathlib import Path
-
-    def _clean_id(v: Any) -> Optional[str]:
-        s = str(v or "").strip()
-        if not s or s.lower() == "nan" or s.lower() == "na":
-            return None
-        return s
-
-    @lru_cache(maxsize=1)
-    def _photo_maps() -> Optional[
-        tuple[
-            dict[tuple[str, str], tuple[Optional[str], Optional[str]]],
-            dict[str, tuple[Optional[str], Optional[str]]],
-            dict[tuple[str, str], tuple[Optional[str], Optional[str]]],
-            dict[str, tuple[Optional[str], Optional[str]]],
-        ]
-    ]:
-        repo_root = Path(__file__).resolve().parents[2]
-        path = repo_root / "data" / "db_playerids.csv"
-        if not path.exists():
-            return None
-        try:
-            df = pd.read_csv(path, dtype=str)
-        except Exception:
-            return None
-        if df is None or getattr(df, "empty", False):
-            return None
-        if "merge_name" not in df.columns:
-            return None
-
-        # Normalize and precompute best row per (name, team) and per name.
-        if "team" not in df.columns:
-            df["team"] = ""
-        if "db_season" not in df.columns:
-            df["db_season"] = ""
-        if "espn_id" not in df.columns:
-            df["espn_id"] = ""
-        if "sleeper_id" not in df.columns:
-            df["sleeper_id"] = ""
-
-        tmp = df[["merge_name", "team", "db_season", "espn_id", "sleeper_id"]].copy()
-        tmp["merge_name_norm"] = tmp["merge_name"].fillna("").map(_merge_name)
-        tmp = tmp[tmp["merge_name_norm"] != ""]
-        tmp["team_norm"] = tmp["team"].fillna("").astype(str).str.upper()
-        try:
-            tmp["_season"] = pd.to_numeric(tmp["db_season"], errors="coerce").fillna(-1)
-        except Exception:
-            tmp["_season"] = -1
-        tmp = tmp.sort_values("_season", ascending=False)
-
-        by_name_team: dict[tuple[str, str], tuple[Optional[str], Optional[str]]] = {}
-        by_name: dict[str, tuple[Optional[str], Optional[str]]] = {}
-        by_last_team: dict[tuple[str, str], tuple[Optional[str], Optional[str]]] = {}
-        by_last: dict[str, tuple[Optional[str], Optional[str]]] = {}
-
-        # First row encountered per key wins (we sorted newest season first).
-        for r in tmp.itertuples(index=False):
-            mn = getattr(r, "merge_name_norm")
-            tn = getattr(r, "team_norm")
-            espn = _clean_id(getattr(r, "espn_id"))
-            sleeper = _clean_id(getattr(r, "sleeper_id"))
-            if (mn, tn) not in by_name_team:
-                by_name_team[(mn, tn)] = (espn, sleeper)
-            if mn not in by_name:
-                by_name[mn] = (espn, sleeper)
-            # last-name fallbacks (helps nicknames like "Hollywood Brown" or "Josh Palmer")
-            last = mn.split(" ")[-1] if mn else ""
-            if last:
-                if (last, tn) not in by_last_team:
-                    by_last_team[(last, tn)] = (espn, sleeper)
-                if last not in by_last:
-                    by_last[last] = (espn, sleeper)
-
-        return by_name_team, by_name, by_last_team, by_last
-
     maps = _photo_maps()
     if not maps:
         return None
@@ -195,6 +116,85 @@ def player_photo_url_from_name_team(*, name: str, team: Optional[str]) -> Option
             return f"https://sleepercdn.com/content/nfl/players/{sleeper_id}.jpg"
         return None
     return None
+
+
+def _clean_id(v: Any) -> Optional[str]:
+    s = str(v or "").strip()
+    if not s or s.lower() == "nan" or s.lower() == "na":
+        return None
+    return s
+
+
+PhotoMaps = tuple[
+    dict[tuple[str, str], tuple[Optional[str], Optional[str]]],
+    dict[str, tuple[Optional[str], Optional[str]]],
+    dict[tuple[str, str], tuple[Optional[str], Optional[str]]],
+    dict[str, tuple[Optional[str], Optional[str]]],
+]
+
+
+@lru_cache(maxsize=1)
+def _photo_maps() -> Optional[PhotoMaps]:
+    """
+    Load and cache (process-wide) the dynastyprocess db_playerids.csv lookup maps.
+
+    This is called for every player row rendered in the UI, so it must be fast.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    path = repo_root / "data" / "db_playerids.csv"
+    if not path.exists():
+        return None
+
+    # Keep "best" row per key by highest db_season (mirrors the old pandas sort/newest-first behavior).
+    by_name_team_s: dict[tuple[str, str], tuple[int, Optional[str], Optional[str]]] = {}
+    by_name_s: dict[str, tuple[int, Optional[str], Optional[str]]] = {}
+    by_last_team_s: dict[tuple[str, str], tuple[int, Optional[str], Optional[str]]] = {}
+    by_last_s: dict[str, tuple[int, Optional[str], Optional[str]]] = {}
+
+    def _season_num(raw: Any) -> int:
+        try:
+            return int(str(raw or "").strip())
+        except Exception:
+            return -1
+
+    def _upsert_best(
+        m: dict[Any, tuple[int, Optional[str], Optional[str]]],
+        key: Any,
+        season: int,
+        espn: Optional[str],
+        sleeper: Optional[str],
+    ) -> None:
+        cur = m.get(key)
+        if cur is None or season > cur[0]:
+            m[key] = (season, espn, sleeper)
+
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                mn = _merge_name(row.get("merge_name") or "")
+                if not mn:
+                    continue
+                tn = str(row.get("team") or "").strip().upper()
+                season = _season_num(row.get("db_season"))
+                espn = _clean_id(row.get("espn_id"))
+                sleeper = _clean_id(row.get("sleeper_id"))
+
+                _upsert_best(by_name_team_s, (mn, tn), season, espn, sleeper)
+                _upsert_best(by_name_s, mn, season, espn, sleeper)
+
+                last = mn.split(" ")[-1] if mn else ""
+                if last:
+                    _upsert_best(by_last_team_s, (last, tn), season, espn, sleeper)
+                    _upsert_best(by_last_s, last, season, espn, sleeper)
+    except Exception:
+        return None
+
+    by_name_team = {k: (v[1], v[2]) for k, v in by_name_team_s.items()}
+    by_name = {k: (v[1], v[2]) for k, v in by_name_s.items()}
+    by_last_team = {k: (v[1], v[2]) for k, v in by_last_team_s.items()}
+    by_last = {k: (v[1], v[2]) for k, v in by_last_s.items()}
+    return by_name_team, by_name, by_last_team, by_last
 
 
 def _uniq_sorted_int(vals: list[Any], *, desc: bool = False) -> list[int]:
@@ -291,13 +291,30 @@ def _has_any_stats(row: dict[str, Any]) -> bool:
     return False
 
 
+def _sanitize_search(q: Optional[str]) -> Optional[str]:
+    """
+    Create a safe token for PostgREST ilike filters.
+    We intentionally strip anything that could break the query syntax (commas, parens, wildcards).
+    """
+    s = (q or "").strip()
+    if not s:
+        return None
+    s = re.sub(r"[^a-zA-Z0-9 ]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    if len(s) < 2:
+        return None
+    return s
+
+
 def get_players_list(
     sb: SupabaseClient,
     *,
     season: Optional[int],
     position: Optional[str],
     team: Optional[str],
+    q: Optional[str] = None,
     limit: int,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     # Season stats drive both the displayed totals and the "only players with recorded stats" filter.
     if season is None:
@@ -339,6 +356,21 @@ def get_players_list(
         ),
     }
 
+    # Push position/team/search filtering into PostgREST where possible to reduce payload size.
+    # Filtering on embedded relationship columns works via dot-qualified keys.
+    if allowed_positions_default is not None:
+        stats_filters["nfl_players.position_abbreviation"] = "in.(QB,RB,WR,TE)"
+    elif pos_filter:
+        stats_filters["nfl_players.position_abbreviation"] = f"eq.{pos_filter}"
+
+    if team_id is not None:
+        stats_filters["nfl_players.team_id"] = f"eq.{int(team_id)}"
+
+    needle = _sanitize_search(q)
+    if needle:
+        # PostgREST OR on the embedded relation; avoids clobbering the root stats OR filter.
+        stats_filters["nfl_players.or"] = f"(first_name.ilike.*{needle}*,last_name.ilike.*{needle}*)"
+
     stats_select = (
         "player_id,games_played,"
         "passing_attempts,passing_completions,passing_yards,passing_touchdowns,passing_interceptions,"
@@ -352,6 +384,7 @@ def get_players_list(
     req_limit = max(int(limit or 0), 1)
     # Safety cap (league size is ~11k players; 20k is plenty).
     req_limit = min(req_limit, 20000)
+    req_offset = max(int(offset or 0), 0)
 
     stats_rows = sb.select(
         "nfl_player_season_stats",
@@ -364,6 +397,7 @@ def get_players_list(
         # Any stable order is fine since we sort client-side. Avoid ordering by nullable stat cols.
         order="player_id.asc",
         limit=req_limit,
+        offset=req_offset,
     )
 
     out: list[dict[str, Any]] = []
@@ -378,9 +412,6 @@ def get_players_list(
             continue
 
         tid = _safe_int(p.get("team_id"))
-        # Team filtering: we only have team_id for the player (current team), so match on that.
-        if team_id is not None and tid != team_id:
-            continue
 
         first = (p.get("first_name") or "").strip()
         last = (p.get("last_name") or "").strip()

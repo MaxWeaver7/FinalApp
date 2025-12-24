@@ -60,10 +60,19 @@ The performance bottleneck is usually **DB sorting + network** and **rendering h
 
 Current approach:
 - Keep leaderboards `limit` small (e.g. 50) but ensure DB-side filters don’t return NULL rows.
-- For Players list: either paginate/virtualize, or use server-side search.
+- For Players list: **paginate** and use **server-side search** (avoid fetching thousands of rows).
 
 Optional DB indexes:
 - `supabase/add_perf_indexes.sql` adds composite indexes for the common filter + sort patterns.
+
+## Recent performance fixes (why Players now load fast)
+- The Players list endpoint `/api/players` supports:
+  - DB-side “has stats” filtering (no limit-before-filter bug)
+  - `q=` server-side search (2+ chars)
+  - pagination (`offset` + `limit`)
+- Headshot mapping (`data/db_playerids.csv`) is cached process-wide so `/api/players` doesn’t spend time reloading/parsing CSV each request.
+
+See also: `docs/PERFORMANCE.md`.
 
 ## Testing
 - `pytest -q`

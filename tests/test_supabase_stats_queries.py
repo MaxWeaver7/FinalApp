@@ -26,6 +26,7 @@ def test_players_list_filters_to_players_with_stats():
                 "nfl_player_season_stats",
                 "*",
                 (
+                    ("nfl_players.position_abbreviation", "in.(QB,RB,WR,TE)"),
                     ("or", "(passing_yards.gt.0,passing_attempts.gt.0,passing_touchdowns.gt.0,rushing_yards.gt.0,rushing_attempts.gt.0,rushing_touchdowns.gt.0,receiving_yards.gt.0,receptions.gt.0,receiving_touchdowns.gt.0,receiving_targets.gt.0)"),
                     ("postseason", "eq.false"),
                     ("season", "eq.2024"),
@@ -69,5 +70,31 @@ def test_player_game_logs_shape():
     assert g["rec_tds"] == 1
     assert g["home_team"] == "ATL"
     assert g["away_team"] == "NYJ"
+
+
+def test_players_list_can_filter_by_name_on_embedded_players_relation():
+    sb = SBStub(
+        {
+            (
+                "nfl_player_season_stats",
+                "*",
+                (
+                    ("nfl_players.or", "(first_name.ilike.*jo*,last_name.ilike.*jo*)"),
+                    ("nfl_players.position_abbreviation", "in.(QB,RB,WR,TE)"),
+                    ("or", "(passing_yards.gt.0,passing_attempts.gt.0,passing_touchdowns.gt.0,rushing_yards.gt.0,rushing_attempts.gt.0,rushing_touchdowns.gt.0,receiving_yards.gt.0,receptions.gt.0,receiving_touchdowns.gt.0,receiving_targets.gt.0)"),
+                    ("postseason", "eq.false"),
+                    ("season", "eq.2024"),
+                ),
+                None,
+                None,
+                25,
+            ): [
+                {"player_id": 10, "games_played": 16, "passing_yards": 4000, "passing_attempts": 600, "nfl_players": {"first_name": "Joe", "last_name": "Tester", "position_abbreviation": "QB", "team_id": 10, "nfl_teams": {"abbreviation": "ATL"}}},
+            ],
+        }
+    )
+    rows = queries_supabase.get_players_list(sb, season=2024, position=None, team=None, q="jo", limit=50, offset=25)
+    assert len(rows) == 1
+    assert rows[0]["player_id"] == "10"
 
 
