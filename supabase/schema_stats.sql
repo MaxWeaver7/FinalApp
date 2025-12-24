@@ -94,6 +94,11 @@ create table if not exists public.nfl_advanced_receiving_stats (
   avg_expected_yac double precision,
   avg_yac_above_expectation double precision,
   catch_percentage double precision,
+  -- Additional GOAT fields (additive; safe to add later via ALTER TABLE below too)
+  avg_cushion double precision,
+  avg_separation double precision,
+  percent_share_of_intended_air_yards double precision,
+  rec_touchdowns integer,
 
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -111,11 +116,15 @@ create table if not exists public.nfl_advanced_rushing_stats (
 
   rush_attempts integer,
   rush_yards integer,
+  rush_touchdowns integer,
   efficiency double precision,
   avg_rush_yards double precision,
+  avg_time_to_los double precision,
   expected_rush_yards double precision,
   rush_yards_over_expected double precision,
   rush_yards_over_expected_per_att double precision,
+  rush_pct_over_expected double precision,
+  percent_attempts_gte_eight_defenders double precision,
 
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -139,10 +148,17 @@ create table if not exists public.nfl_advanced_passing_stats (
   passer_rating double precision,
   completion_percentage double precision,
   completion_percentage_above_expectation double precision,
+  expected_completion_percentage double precision,
   avg_time_to_throw double precision,
   avg_intended_air_yards double precision,
   avg_completed_air_yards double precision,
+  avg_air_distance double precision,
+  avg_air_yards_differential double precision,
+  avg_air_yards_to_sticks double precision,
+  max_air_distance double precision,
+  max_completed_air_distance double precision,
   aggressiveness double precision,
+  games_played integer,
 
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -151,6 +167,42 @@ create table if not exists public.nfl_advanced_passing_stats (
 );
 
 create index if not exists idx_adv_pass_season_week on public.nfl_advanced_passing_stats(season, week, postseason);
+
+-- Additive-only column migration helpers (safe to re-run)
+-- These keep schema drift manageable without requiring drop/recreate.
+
+alter table if exists public.nfl_advanced_receiving_stats
+  add column if not exists avg_cushion double precision;
+alter table if exists public.nfl_advanced_receiving_stats
+  add column if not exists avg_separation double precision;
+alter table if exists public.nfl_advanced_receiving_stats
+  add column if not exists percent_share_of_intended_air_yards double precision;
+alter table if exists public.nfl_advanced_receiving_stats
+  add column if not exists rec_touchdowns integer;
+
+alter table if exists public.nfl_advanced_rushing_stats
+  add column if not exists rush_touchdowns integer;
+alter table if exists public.nfl_advanced_rushing_stats
+  add column if not exists avg_time_to_los double precision;
+alter table if exists public.nfl_advanced_rushing_stats
+  add column if not exists rush_pct_over_expected double precision;
+alter table if exists public.nfl_advanced_rushing_stats
+  add column if not exists percent_attempts_gte_eight_defenders double precision;
+
+alter table if exists public.nfl_advanced_passing_stats
+  add column if not exists expected_completion_percentage double precision;
+alter table if exists public.nfl_advanced_passing_stats
+  add column if not exists avg_air_distance double precision;
+alter table if exists public.nfl_advanced_passing_stats
+  add column if not exists avg_air_yards_differential double precision;
+alter table if exists public.nfl_advanced_passing_stats
+  add column if not exists avg_air_yards_to_sticks double precision;
+alter table if exists public.nfl_advanced_passing_stats
+  add column if not exists max_air_distance double precision;
+alter table if exists public.nfl_advanced_passing_stats
+  add column if not exists max_completed_air_distance double precision;
+alter table if exists public.nfl_advanced_passing_stats
+  add column if not exists games_played integer;
 
 commit;
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Player } from "@/types/player";
-import { cn } from "@/lib/utils";
+import { cn, formatStat } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 import { TeamLogo } from "./TeamLogo";
 
@@ -44,7 +44,7 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
                 alt={player.player_name}
                 className="w-full h-full object-cover"
                 loading="lazy"
-                onError={(e) => {
+                onError={() => {
                   setImgError(true);
                 }}
               />
@@ -124,7 +124,7 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
             <p className="text-xs text-muted-foreground">ATT</p>
           </div>
           <div className="text-center">
-            <p className="text-lg font-mono font-semibold text-primary">{Number(seasonTotals.avgYardsPerRush || 0).toFixed(1)}</p>
+            <p className="text-lg font-mono font-semibold text-primary">{formatStat(seasonTotals.avgYardsPerRush || 0)}</p>
             <p className="text-xs text-muted-foreground">YPC</p>
           </div>
           <div className="text-center">

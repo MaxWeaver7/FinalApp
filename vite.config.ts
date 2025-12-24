@@ -18,7 +18,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        // Backend API server (see `python3 -m src.web.server --port 8003`)
+        target: 'http://127.0.0.1:8003',
         changeOrigin: true,
       },
     },

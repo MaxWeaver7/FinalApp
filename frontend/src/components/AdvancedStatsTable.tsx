@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { PlayerGameLog } from "@/types/player";
-import { cn } from "@/lib/utils";
+import { cn, formatStat } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -173,7 +173,7 @@ export function AdvancedStatsTable({ gameLogs, position }: AdvancedStatsTablePro
                       <TableCell className="text-center font-mono bg-primary/5">{game.rush_yards ?? 0}</TableCell>
                       <TableCell className="text-center font-mono bg-primary/5">{game.rush_tds ?? 0}</TableCell>
                       <TableCell className="text-center font-mono bg-primary/[0.03]">
-                        {typeof game.qb_rating === "number" ? game.qb_rating.toFixed(1) : "—"}
+                        {formatStat(game.qb_rating)}
                       </TableCell>
                     </>
                   ) : isReceiver ? (
@@ -193,7 +193,7 @@ export function AdvancedStatsTable({ gameLogs, position }: AdvancedStatsTablePro
                       </TableCell>
                       <TableCell className="text-center font-mono">{game.rush_tds}</TableCell>
                       <TableCell className={cn("text-center font-mono", getStatHighlight(ypc, { high: 5, low: 3 }))}>
-                        {ypc.toFixed(1)}
+                        {formatStat(ypc)}
                       </TableCell>
                       <TableCell className="text-center font-mono bg-primary/5">{game.receptions}</TableCell>
                       <TableCell className="text-center font-mono bg-primary/5">{game.rec_yards}</TableCell>

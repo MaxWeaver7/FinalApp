@@ -1,6 +1,6 @@
 import { Player } from "@/types/player";
 import { StatCard } from "./StatCard";
-import { cn, getStatTrend } from "@/lib/utils";
+import { cn, formatStat, getStatTrend } from "@/lib/utils";
 import { TeamLogo } from "./TeamLogo";
 import { useState } from "react";
 
@@ -15,6 +15,15 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
   const photoUrl = player.photoUrl;
   const [imgError, setImgError] = useState(false);
   const showImage = !!photoUrl && !imgError;
+  const accent = player.teamColors?.primary || "";
+
+  const chips: string[] = [];
+  if (player.jersey_number) chips.push(`#${player.jersey_number}`);
+  const hw = [player.height, player.weight].filter(Boolean).join(" / ");
+  if (hw) chips.push(hw);
+  if (typeof player.age === "number") chips.push(`Age ${player.age}`);
+  if (player.experience) chips.push(`Exp ${player.experience}`);
+  if (player.college) chips.push(player.college);
   
   return (
     <div className="space-y-4">
@@ -26,7 +35,7 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
               alt={player.player_name}
               className="w-full h-full object-cover"
               loading="lazy"
-              onError={(e) => {
+              onError={() => {
                 setImgError(true);
               }}
             />
@@ -44,6 +53,19 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             <TeamLogo team={player.team} size="md" />
             <p>{player.team} • {player.position} • {stats.season || player.season} Season</p>
           </div>
+          {chips.length ? (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {chips.map((c) => (
+                <span
+                  key={c}
+                  className="px-3 py-1 rounded-full text-xs font-mono text-muted-foreground border bg-secondary/20"
+                  style={{ borderColor: accent || undefined }}
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -66,7 +88,7 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
           <StatCard 
             label="Rush Yards" 
             value={stats.rushingYards || 0} 
-            subValue={`${Number(stats.avgYardsPerRush || 0).toFixed(1)} avg`}
+            subValue={`${formatStat(stats.avgYardsPerRush || 0)} avg`}
             trend={getStatTrend('rushingYards', stats.rushingYards || 0)}
             delay={250}
           />
@@ -80,7 +102,7 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
           <StatCard 
             label="INT" 
             value={stats.passingInterceptions || 0} 
-            subValue={`${typeof stats.qbRating === "number" ? stats.qbRating.toFixed(1) : "—"} rating`}
+            subValue={`${formatStat(stats.qbRating)} rating`}
             delay={350}
           />
         </div>
@@ -95,14 +117,14 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
           <StatCard 
             label="Rec Yards" 
             value={stats.receivingYards || 0} 
-            subValue={`${Number(stats.avgYardsPerCatch || 0).toFixed(1)} avg`}
+            subValue={`${formatStat(stats.avgYardsPerCatch || 0)} avg`}
             trend={getStatTrend('receivingYards', stats.receivingYards || 0)}
             delay={200}
           />
           <StatCard 
             label="Targets" 
             value={stats.targets || 0} 
-            subValue={`${((stats.targets || 0) / (stats.games || 1)).toFixed(1)} per game`}
+            subValue={`${formatStat((stats.targets || 0) / (stats.games || 1))} per game`}
             delay={250}
           />
           <StatCard 
@@ -124,7 +146,7 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
           <StatCard 
             label="Rush Yards" 
             value={stats.rushingYards || 0} 
-            subValue={`${Number(stats.avgYardsPerRush || 0).toFixed(1)} avg`}
+            subValue={`${formatStat(stats.avgYardsPerRush || 0)} avg`}
             trend={getStatTrend('rushingYards', stats.rushingYards || 0)}
             delay={200}
           />

@@ -34,6 +34,14 @@ export interface Player {
   player_name: string;
   team: string | null;
   position: string | null;
+  // Bio (BallDontLie roster fields)
+  height?: string | null;
+  weight?: string | null;
+  jersey_number?: string | null;
+  college?: string | null;
+  experience?: string | null;
+  age?: number | null;
+  teamColors?: { primary?: string | null; secondary?: string | null };
   season?: number;
   games?: number;
   targets?: number;
@@ -73,6 +81,21 @@ export interface Player {
     passingInterceptions?: number;
     qbRating?: number | null;
     qbr?: number | null;
+  };
+}
+
+export type GoatAdvancedRow = Record<string, any>;
+
+export interface GoatAdvancedPayload {
+  regular: {
+    receiving: GoatAdvancedRow[];
+    rushing: GoatAdvancedRow[];
+    passing: GoatAdvancedRow[];
+  };
+  postseasonTotals?: {
+    receiving: GoatAdvancedRow[];
+    rushing: GoatAdvancedRow[];
+    passing: GoatAdvancedRow[];
   };
 }
 

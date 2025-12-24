@@ -553,7 +553,7 @@ class Handler(BaseHTTPRequestHandler):
 
                 rows = sb.select(
                     "nfl_players",
-                    select="id,first_name,last_name,position_abbreviation,team_id",
+                    select="id,first_name,last_name,position_abbreviation,team_id,height,weight,jersey_number,college,experience,age",
                     filters={"id": f"eq.{pid_int}"},
                     limit=1,
                 )
@@ -562,11 +562,20 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 r = rows[0]
                 team_abbr = None
+                team_primary = None
+                team_secondary = None
                 tid = r.get("team_id")
                 if tid not in (None, ""):
-                    teams = sb.select("nfl_teams", select="abbreviation", filters={"id": f"eq.{int(tid)}"}, limit=1)
+                    teams = sb.select(
+                        "nfl_teams",
+                        select="abbreviation,primary_color,secondary_color",
+                        filters={"id": f"eq.{int(tid)}"},
+                        limit=1,
+                    )
                     if teams:
                         team_abbr = teams[0].get("abbreviation")
+                        team_primary = teams[0].get("primary_color")
+                        team_secondary = teams[0].get("secondary_color")
                 name = (str(r.get("first_name") or "").strip() + " " + str(r.get("last_name") or "").strip()).strip() or str(pid_int)
                 player = {
                     "player_id": str(pid_int),
@@ -574,6 +583,15 @@ class Handler(BaseHTTPRequestHandler):
                     "team": team_abbr,
                     "position": r.get("position_abbreviation"),
                     "season": season,
+                    # Bio (BallDontLie / roster fields)
+                    "height": r.get("height"),
+                    "weight": r.get("weight"),
+                    "jersey_number": r.get("jersey_number"),
+                    "college": r.get("college"),
+                    "experience": r.get("experience"),
+                    "age": r.get("age"),
+                    # Team colors (from Supabase-seeded nfl_teams)
+                    "teamColors": {"primary": team_primary, "secondary": team_secondary},
                 }
                 player["photoUrl"] = queries_supabase.player_photo_url_from_name_team(name=name, team=team_abbr)
                 # Season totals from nfl_player_season_stats (if present)
@@ -624,7 +642,63 @@ class Handler(BaseHTTPRequestHandler):
                     "qbr": qbr,
                 }
                 game_logs = queries_supabase.get_player_game_logs(sb, player_id=str(pid_int), season=season, include_postseason=include_postseason)
-                self._json({"player": player, "gameLogs": game_logs})
+
+                # GOAT advanced stats (weekly + season totals via week=0). Postseason totals only (week=0) when enabled.
+                adv_filters = {"player_id": f"eq.{pid_int}", "season": f"eq.{int(season)}", "postseason": "eq.false"}
+                adv_recv = sb.select(
+                    "nfl_advanced_receiving_stats",
+                    select="season,week,targets,receptions,yards,avg_intended_air_yards,avg_yac,avg_expected_yac,avg_yac_above_expectation,avg_cushion,avg_separation,catch_percentage,percent_share_of_intended_air_yards,rec_touchdowns",
+                    filters=adv_filters,
+                    order="week.asc",
+                    limit=300,
+                )
+                adv_rush = sb.select(
+                    "nfl_advanced_rushing_stats",
+                    select="season,week,rush_attempts,rush_yards,rush_touchdowns,avg_time_to_los,expected_rush_yards,rush_yards_over_expected,rush_yards_over_expected_per_att,rush_pct_over_expected,efficiency,percent_attempts_gte_eight_defenders,avg_rush_yards",
+                    filters=adv_filters,
+                    order="week.asc",
+                    limit=300,
+                )
+                adv_pass = sb.select(
+                    "nfl_advanced_passing_stats",
+                    select="season,week,attempts,completions,pass_yards,pass_touchdowns,interceptions,passer_rating,completion_percentage,completion_percentage_above_expectation,expected_completion_percentage,avg_time_to_throw,avg_intended_air_yards,avg_completed_air_yards,avg_air_distance,avg_air_yards_differential,avg_air_yards_to_sticks,max_air_distance,max_completed_air_distance,aggressiveness,games_played",
+                    filters=adv_filters,
+                    order="week.asc",
+                    limit=300,
+                )
+
+                postseason_totals = {"receiving": [], "rushing": [], "passing": []}
+                if include_postseason:
+                    post_filters = {"player_id": f"eq.{pid_int}", "season": f"eq.{int(season)}", "postseason": "eq.true", "week": "eq.0"}
+                    postseason_totals["receiving"] = sb.select(
+                        "nfl_advanced_receiving_stats",
+                        select="season,week,targets,receptions,yards,avg_intended_air_yards,avg_yac,avg_expected_yac,avg_yac_above_expectation,avg_cushion,avg_separation,catch_percentage,percent_share_of_intended_air_yards,rec_touchdowns",
+                        filters=post_filters,
+                        limit=10,
+                    )
+                    postseason_totals["rushing"] = sb.select(
+                        "nfl_advanced_rushing_stats",
+                        select="season,week,rush_attempts,rush_yards,rush_touchdowns,avg_time_to_los,expected_rush_yards,rush_yards_over_expected,rush_yards_over_expected_per_att,rush_pct_over_expected,efficiency,percent_attempts_gte_eight_defenders,avg_rush_yards",
+                        filters=post_filters,
+                        limit=10,
+                    )
+                    postseason_totals["passing"] = sb.select(
+                        "nfl_advanced_passing_stats",
+                        select="season,week,attempts,completions,pass_yards,pass_touchdowns,interceptions,passer_rating,completion_percentage,completion_percentage_above_expectation,expected_completion_percentage,avg_time_to_throw,avg_intended_air_yards,avg_completed_air_yards,avg_air_distance,avg_air_yards_differential,avg_air_yards_to_sticks,max_air_distance,max_completed_air_distance,aggressiveness,games_played",
+                        filters=post_filters,
+                        limit=10,
+                    )
+
+                self._json(
+                    {
+                        "player": player,
+                        "gameLogs": game_logs,
+                        "goatAdvanced": {
+                            "regular": {"receiving": adv_recv, "rushing": adv_rush, "passing": adv_pass},
+                            "postseasonTotals": postseason_totals,
+                        },
+                    }
+                )
             else:
                 with self._conn() as conn:
                     # Get player info

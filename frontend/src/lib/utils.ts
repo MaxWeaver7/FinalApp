@@ -7,6 +7,37 @@ export function cn(...inputs: ClassValue[]) {
 
 export type StatTrend = 'positive' | 'negative' | 'neutral';
 
+/**
+ * Consistent stat formatting for UI.
+ *
+ * - Integers (yards, attempts, TDs, etc.) should not show decimals.
+ * - Rates/efficiency/advanced metrics should display as X.XX.
+ */
+export function formatStat(
+  value: unknown,
+  opts?: {
+    decimals?: number;
+    integer?: boolean;
+    empty?: string;
+  }
+): string {
+  const decimals = opts?.decimals ?? 2;
+  const empty = opts?.empty ?? "—";
+  if (value === null || value === undefined || value === "") return empty;
+
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return empty;
+
+  // Explicit integer formatting.
+  if (opts?.integer) return String(Math.trunc(n));
+
+  // If it is effectively an integer, show as integer (prevents 10.00 yards).
+  if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+
+  // Default: fixed decimals for advanced metrics.
+  return n.toFixed(decimals);
+}
+
 export function getStatTrend(statName: string, value: number): StatTrend {
   const lowerStat = statName.toLowerCase();
   

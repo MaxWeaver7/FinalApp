@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useFilterOptions } from "@/hooks/useApi";
 import { TeamLogo } from "@/components/TeamLogo";
 import { useNavigate } from "react-router-dom";
+import { formatStat } from "@/lib/utils";
 
 type Mode = "weekly" | "season";
 type Category = "receiving" | "rushing" | "passing" | "total_yards";
@@ -219,7 +220,6 @@ export default function Leaderboards() {
                   <SelectItem value="ALL">All Positions</SelectItem>
                   <SelectItem value="QB">QB</SelectItem>
                   <SelectItem value="RB">RB</SelectItem>
-                  <SelectItem value="HB">HB</SelectItem>
                   <SelectItem value="WR">WR</SelectItem>
                   <SelectItem value="TE">TE</SelectItem>
                 </SelectContent>
@@ -341,17 +341,17 @@ export default function Leaderboards() {
                       <>
                         <TableCell className="text-center font-mono">{r.rush_attempts ?? 0}</TableCell>
                         <TableCell className="text-center font-mono font-semibold">{r.rush_yards ?? 0}</TableCell>
-                        <TableCell className="text-center font-mono">{typeof r.ypc === "number" ? r.ypc.toFixed(1) : "0.0"}</TableCell>
+                        <TableCell className="text-center font-mono">{formatStat(r.ypc ?? 0)}</TableCell>
                         {mode === "weekly" ? null : (
-                          <TableCell className="text-center font-mono">{typeof r.ypg === "number" ? r.ypg.toFixed(1) : "0.0"}</TableCell>
+                          <TableCell className="text-center font-mono">{formatStat(r.ypg ?? 0)}</TableCell>
                         )}
                         <TableCell className="text-center font-mono">{r.receptions ?? 0}</TableCell>
                         {mode === "weekly" ? null : (
-                          <TableCell className="text-center font-mono">{typeof r.rpg === "number" ? r.rpg.toFixed(1) : "0.0"}</TableCell>
+                          <TableCell className="text-center font-mono">{formatStat(r.rpg ?? 0)}</TableCell>
                         )}
                         <TableCell className="text-center font-mono">{r.rec_yards ?? 0}</TableCell>
                         {mode === "weekly" ? null : (
-                          <TableCell className="text-center font-mono">{typeof r.rec_ypg === "number" ? r.rec_ypg.toFixed(1) : "0.0"}</TableCell>
+                          <TableCell className="text-center font-mono">{formatStat(r.rec_ypg ?? 0)}</TableCell>
                         )}
                         <TableCell className="text-center font-mono">{r.rush_tds ?? 0}</TableCell>
                       </>
