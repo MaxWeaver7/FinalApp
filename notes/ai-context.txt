@@ -1,0 +1,45 @@
+BALLDONTLIE NFL API — AI Integration Context
+
+This file is meant to be a quick reference for AIs (and humans) working in this repo.
+
+OpenAPI spec (share this with an AI to auto-understand the API):
+- https://www.balldontlie.io/openapi.yml
+
+Authentication
+- All requests require an API key (set in env as `BALLDONTLIE_API_KEY` for this repo’s ingestion).
+- Header:
+  - Authorization: YOUR_API_KEY
+
+Pagination
+- Cursor-based pagination (not limit/offset).
+- Responses include:
+  - { "meta": { "next_cursor": 90, "per_page": 25 } }
+- Use:
+  - ?cursor=NEXT_CURSOR
+  - per_page defaults to 25, max is 100
+
+Account tiers (high-level)
+- Free: limited endpoints
+- ALL-STAR / GOAT: unlock season stats, stats, and advanced stats endpoints
+
+Common endpoints (examples)
+- Teams
+  - GET https://api.balldontlie.io/nfl/v1/teams
+- Players
+  - GET https://api.balldontlie.io/nfl/v1/players
+- Games
+  - GET https://api.balldontlie.io/nfl/v1/games
+- Season stats
+  - GET https://api.balldontlie.io/nfl/v1/season_stats
+- Advanced stats (GOAT)
+  - Advanced Passing Stats
+  - Advanced Receiving Stats
+  - Advanced Rushing Stats
+
+Repo integration notes
+- The Supabase schema for the future advanced stats tables lives in:
+  - supabase/schema_stats.sql
+- When adding new advanced leaderboards, follow the performance rules in:
+  - docs/PERFORMANCE.md
+
+

@@ -504,15 +504,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/players":
             # Default high to avoid hiding valid players when the UI requests "all skill players with stats".
             limit = int(qs.get("limit", ["12000"])[0])
+            offset = int(qs.get("offset", ["0"])[0] or 0)
+            q = q_str("q")
             if sb is not None:
                 players = queries_supabase.get_players_list(
                     sb,
                     season=q_int("season"),
                     position=q_str("position"),
                     team=q_str("team"),
+                    q=q,
                     limit=limit,
+                    offset=offset,
                 )
-                self._json({"players": players})
+                # Optional paging helpers (ignored by older clients).
+                self._json({"players": players, "nextOffset": offset + len(players), "hasMore": len(players) >= max(limit, 1)})
             else:
                 with self._conn() as conn:
                     players = queries.get_players_list(
@@ -528,7 +533,7 @@ class Handler(BaseHTTPRequestHandler):
                     # Normalize naming to what the frontend expects
                     if "player_position" in p and "position" not in p:
                         p["position"] = p.get("player_position")
-                self._json({"players": players})
+                self._json({"players": players, "nextOffset": 0 + len(players), "hasMore": False})
             return
 
         if path.startswith("/api/player/"):
