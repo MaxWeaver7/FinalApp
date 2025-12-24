@@ -65,7 +65,7 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
           <h3 className="font-semibold text-foreground truncate">{player.player_name}</h3>
           <div className="flex items-center gap-1.5">
             <TeamLogo team={player.team} size="sm" />
-            <p className="text-sm text-muted-foreground">{player.team}</p>
+            <p className="text-sm text-muted-foreground">{player.team || "FA"}</p>
           </div>
         </div>
 

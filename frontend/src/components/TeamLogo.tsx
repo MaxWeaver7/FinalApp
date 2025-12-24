@@ -52,15 +52,23 @@ export function TeamLogo({ team, size = "sm", className = "" }: TeamLogoProps) {
   const teamUpper = (team || "").toUpperCase();
   const logoUrl = TEAM_LOGO_MAP[teamUpper];
 
-  if (!logoUrl || !team) {
-    return null;
-  }
-
   const sizeClasses = {
     sm: "w-4 h-4",
     md: "w-6 h-6",
     lg: "w-8 h-8",
   };
+
+  // If no team or logo, show a placeholder (Free Agent / Rookie indicator)
+  if (!logoUrl || !team) {
+    return (
+      <div 
+        className={`${sizeClasses[size]} rounded-full bg-muted/20 border border-border flex items-center justify-center ${className}`}
+        title="Free Agent / No Team"
+      >
+        <span className="text-[8px] text-muted-foreground font-bold">FA</span>
+      </div>
+    );
+  }
 
   return (
     <img

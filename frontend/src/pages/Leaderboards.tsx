@@ -78,13 +78,19 @@ export default function Leaderboards() {
     let cancelled = false;
     setLoading(true);
     setErr(null);
+    
+    // Debug logging to verify API calls
+    console.log(`[Leaderboards] Fetching: ${endpoint}`);
+    
     fetchJson<{ rows: Row[] }>(endpoint)
       .then((data) => {
         if (cancelled) return;
+        console.log(`[Leaderboards] Received ${data.rows?.length || 0} rows`);
         setRows(data.rows || []);
       })
       .catch((e) => {
         if (cancelled) return;
+        console.error(`[Leaderboards] Error fetching data:`, e);
         setErr(String(e?.message || e));
         setRows([]);
       })
@@ -218,7 +224,7 @@ export default function Leaderboards() {
                 onChange={(v) => setPosition(v === "All Positions" ? "ALL" : v)}
               />
 
-              <div className="lg:min-w-[240px]">
+              <div className="lg:min-w-[240px] lg:max-w-md">
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -297,29 +303,37 @@ export default function Leaderboards() {
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full overflow-hidden bg-secondary ring-1 ring-border shrink-0">
                           {r.photoUrl ? (
-                            <img src={r.photoUrl} className="w-full h-full object-cover" loading="lazy" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs font-bold">
-                              {(r.player_name || r.player_id || "?")
-                                .toString()
-                                .split(" ")
-                                .filter(Boolean)
-                                .slice(0, 2)
-                                .map((n: string) => n[0])
-                                .join("")}
-                            </div>
-                          )}
+                            <img 
+                              src={r.photoUrl} 
+                              className="w-full h-full object-cover" 
+                              loading="lazy"
+                              onError={(e) => {
+                                // Hide broken image, fallback will show
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          ) : null}
+                          <div className={`w-full h-full flex items-center justify-center text-muted-foreground text-xs font-bold ${r.photoUrl ? "hidden" : ""}`}>
+                            {(r.player_name || r.player_id || "?")
+                              .toString()
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((n: string) => n[0])
+                              .join("")
+                              .toUpperCase()}
+                          </div>
                         </div>
                         <div className="min-w-0">
                           <div className="truncate">{r.player_name || r.player_id}</div>
-                          <div className="text-xs text-muted-foreground">{r.position || ""}</div>
+                          <div className="text-xs text-muted-foreground">{r.position || "UNK"}</div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm">
                       <div className="flex items-center gap-1.5">
                         <TeamLogo team={r.team} size="sm" />
-                        <span>{r.team}</span>
+                        <span>{r.team || "FA"}</span>
                       </div>
                     </TableCell>
 

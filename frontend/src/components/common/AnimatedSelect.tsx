@@ -116,7 +116,7 @@ export function AnimatedSelect({ label, options, value, onChange, className }: A
             initial="closed"
             animate="open"
             exit="closed"
-            className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-700 shadow-xl rounded-lg overflow-hidden z-[9999] max-h-64 overflow-y-auto"
+            className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-xl rounded-lg overflow-hidden z-[9999] max-h-64 overflow-y-auto"
             role="listbox"
           >
             {options.map((option) => (
@@ -127,8 +127,8 @@ export function AnimatedSelect({ label, options, value, onChange, className }: A
                 className={cn(
                   "px-4 py-2.5 text-sm cursor-pointer transition-colors",
                   option === value
-                    ? "text-emerald-400 font-bold bg-zinc-800/50"
-                    : "text-foreground hover:bg-zinc-800 hover:text-emerald-400"
+                    ? "text-primary font-bold bg-secondary/50"
+                    : "text-foreground hover:bg-secondary hover:text-primary"
                 )}
                 role="option"
                 aria-selected={option === value}

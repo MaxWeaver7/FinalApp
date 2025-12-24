@@ -316,138 +316,128 @@ def get_players_list(
     limit: int,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    # Season stats drive both the displayed totals and the "only players with recorded stats" filter.
+    """
+    Players with Stats ONLY (INNER JOIN)
+    Uses !inner to force INNER JOIN on stats table - only shows players who have
+    season stats for the requested season. Includes rookies like Dart/Egbuka who HAVE stats,
+    but excludes practice squad players with no stats.
+    """
     if season is None:
         return []
 
-    # Filter by team abbreviation (best-effort; uses current team on nfl_players).
-    team_id: Optional[int] = None
+    # Defensive/special teams positions to BLOCK
+    blocked_positions = {"DB", "CB", "S", "SS", "FS", "LB", "ILB", "OLB", "DL", "DE", "DT", "NT", "OL", "OT", "OG", "C", "K", "P", "LS"}
+    
+    # Build filters for the INNER JOIN query
+    player_filters: dict[str, Any] = {}
+    
+    # Filter by team if specified
     if team:
         t = sb.select("nfl_teams", select="id", filters={"abbreviation": f"eq.{team}"}, limit=1)
         if t:
             team_id = _safe_int(t[0].get("id"))
-
-    pos_filter = (position or "").strip().upper()
-    # Default: offense-only. (Prevents defensive players from ever showing up in the UI.)
-    if not pos_filter:
-        allowed_positions_default = {"QB", "RB", "WR", "TE"}
-    else:
-        allowed_positions_default = None
-    # Important: PostgREST ordering puts NULLs first unless explicitly handled.
-    # If we don't filter out NULL/zero stat rows up front, we can "use up" the limit
-    # on empty rows and accidentally exclude real producers (e.g. Stafford).
-    stats_filters: dict[str, Any] = {
-        "season": f"eq.{int(season)}",
-        "postseason": "eq.false",
-        # keep only rows with any meaningful production
-        "or": (
-            "("
-            "passing_yards.gt.0,"
-            "passing_attempts.gt.0,"
-            "passing_touchdowns.gt.0,"
-            "rushing_yards.gt.0,"
-            "rushing_attempts.gt.0,"
-            "rushing_touchdowns.gt.0,"
-            "receiving_yards.gt.0,"
-            "receptions.gt.0,"
-            "receiving_touchdowns.gt.0,"
-            "receiving_targets.gt.0"
-            ")"
-        ),
-    }
-
-    # Push position/team/search filtering into PostgREST where possible to reduce payload size.
-    # Filtering on embedded relationship columns works via dot-qualified keys.
-    if allowed_positions_default is not None:
-        stats_filters["nfl_players.position_abbreviation"] = "in.(QB,RB,WR,TE)"
-    elif pos_filter:
-        stats_filters["nfl_players.position_abbreviation"] = f"eq.{pos_filter}"
-
-    if team_id is not None:
-        stats_filters["nfl_players.team_id"] = f"eq.{int(team_id)}"
-
+            if team_id:
+                player_filters["team_id"] = f"eq.{team_id}"
+    
+    # Text search on name
     needle = _sanitize_search(q)
     if needle:
-        # PostgREST OR on the embedded relation; avoids clobbering the root stats OR filter.
-        stats_filters["nfl_players.or"] = f"(first_name.ilike.*{needle}*,last_name.ilike.*{needle}*)"
-
-    stats_select = (
-        "player_id,games_played,"
-        "passing_attempts,passing_completions,passing_yards,passing_touchdowns,passing_interceptions,"
-        "qbr,qb_rating,"
-        "rushing_attempts,rushing_yards,rushing_touchdowns,"
-        "receptions,receiving_yards,receiving_touchdowns,receiving_targets"
-    )
-
-    # Pull season stats and embed nfl_players + nfl_teams in a single query.
-    # This avoids huge `id in (...)` URL filters that silently truncate/miss players at scale.
-    req_limit = max(int(limit or 0), 1)
-    # Safety cap (league size is ~11k players; 20k is plenty).
-    req_limit = min(req_limit, 20000)
+        player_filters["or"] = f"(first_name.ilike.*{needle}*,last_name.ilike.*{needle}*)"
+    
+    # CRITICAL: Filter stats by season (PostgREST foreign table filter syntax)
+    player_filters["nfl_player_season_stats.season"] = f"eq.{int(season)}"
+    player_filters["nfl_player_season_stats.postseason"] = "eq.false"
+    
+    # CRITICAL: Fetch ALL players (10000 limit to be absolutely sure we get everyone)
+    # This ensures players like "Stafford" (sorted late alphabetically) aren't cut off.
+    # We MUST fetch the full pool BEFORE Python filtering, then slice to requested limit at the end.
+    req_limit = 10000  # Very high limit to guarantee we get all active players
     req_offset = max(int(offset or 0), 0)
-
-    stats_rows = sb.select(
-        "nfl_player_season_stats",
+    
+    # INNER JOIN: Use !inner to force INNER JOIN on stats table
+    # This automatically filters out any player WITHOUT stats for this season
+    players = sb.select(
+        "nfl_players",
         select=(
-            stats_select
-            + ","
-            + "nfl_players(first_name,last_name,position_abbreviation,team_id,nfl_teams(abbreviation))"
+            "id,first_name,last_name,position_abbreviation,team_id,"
+            "nfl_teams(abbreviation),"
+            "nfl_player_season_stats!inner("
+            "games_played,"
+            "passing_attempts,passing_completions,passing_yards,passing_touchdowns,passing_interceptions,"
+            "qbr,qb_rating,"
+            "rushing_attempts,rushing_yards,rushing_touchdowns,"
+            "receptions,receiving_yards,receiving_touchdowns,receiving_targets"
+            ")"
         ),
-        filters=stats_filters,
-        # Any stable order is fine since we sort client-side. Avoid ordering by nullable stat cols.
-        order="player_id.asc",
+        filters=player_filters,
+        # REMOVED ORDER BY - it might be causing Supabase to limit results before we get to "S" names
+        # order="last_name.asc.nullslast,first_name.asc.nullslast",
         limit=req_limit,
         offset=req_offset,
     )
-
+    
+    
+    # Process players with PYTHON-SIDE DEFENSIVE BLOCKING
     out: list[dict[str, Any]] = []
-    for s in stats_rows:
-        if not _has_any_stats(s):
+    pos_filter = (position or "").strip().upper()
+    
+    for p in players:
+        pid = _safe_int(p.get("id"))
+        if not pid:
             continue
-        p = s.get("nfl_players") or {}
-        pos = (p.get("position_abbreviation") or "").strip().upper()
-        if allowed_positions_default is not None and pos not in allowed_positions_default:
-            continue
-        if pos_filter and pos != pos_filter:
-            continue
-
-        tid = _safe_int(p.get("team_id"))
-
+        
+        pos = (p.get("position_abbreviation") or "").strip().upper() or None
+        
+        # Position Filtering (Defense Blocker)
+        # Rule A: ALLOW NULL/UNK/empty positions (they have stats, so they earned it!)
+        if not pos or pos in ["UNK", "UNKNOWN", "NULL", "ROOKIE"]:
+            pass  # Allow if they have stats
+        # Rule B: If user filtered for specific position, enforce it
+        elif pos_filter and pos != pos_filter:
+            continue  # Skip - doesn't match requested position
+        # Rule C: Block defensive/special teams (double-check - shouldn't have offensive stats)
+        elif pos in blocked_positions:
+            continue  # Skip defensive players
+        # Rule D: Allow all other positions (QB, RB, WR, TE, FB, etc.)
+        
+        # Build player dict
         first = (p.get("first_name") or "").strip()
         last = (p.get("last_name") or "").strip()
-        pid = _safe_int(s.get("player_id"))
-        if pid is None:
-            continue
         name = (first + " " + last).strip() or str(pid)
-        t = p.get("nfl_teams") or {}
-        team_abbr = (t.get("abbreviation") or None)
-
-        games = _safe_int(s.get("games_played")) or 0
-        targets = _safe_int(s.get("receiving_targets")) or 0
-        rec = _safe_int(s.get("receptions")) or 0
-        rec_yards = _safe_int(s.get("receiving_yards")) or 0
-        rec_tds = _safe_int(s.get("receiving_touchdowns")) or 0
-        rush_att = _safe_int(s.get("rushing_attempts")) or 0
-        rush_yards = _safe_int(s.get("rushing_yards")) or 0
-        rush_tds = _safe_int(s.get("rushing_touchdowns")) or 0
-        pass_att = _safe_int(s.get("passing_attempts")) or 0
-        pass_cmp = _safe_int(s.get("passing_completions")) or 0
-        pass_yds = _safe_int(s.get("passing_yards")) or 0
-        pass_tds = _safe_int(s.get("passing_touchdowns")) or 0
-        pass_int = _safe_int(s.get("passing_interceptions")) or 0
-        qb_rating = _safe_float(s.get("qb_rating"))
-        qbr = _safe_float(s.get("qbr"))
-
+        
+        team_obj = p.get("nfl_teams") or {}
+        team_abbr = team_obj.get("abbreviation") or None
+        
+        # Extract stats from embedded table (INNER JOIN guarantees at least one row)
+        stats_list = p.get("nfl_player_season_stats") or []
+        stats = stats_list[0] if stats_list else {}
+        
+        games = _safe_int(stats.get("games_played")) or 0
+        targets = _safe_int(stats.get("receiving_targets")) or 0
+        rec = _safe_int(stats.get("receptions")) or 0
+        rec_yards = _safe_int(stats.get("receiving_yards")) or 0
+        rec_tds = _safe_int(stats.get("receiving_touchdowns")) or 0
+        rush_att = _safe_int(stats.get("rushing_attempts")) or 0
+        rush_yards = _safe_int(stats.get("rushing_yards")) or 0
+        rush_tds = _safe_int(stats.get("rushing_touchdowns")) or 0
+        pass_att = _safe_int(stats.get("passing_attempts")) or 0
+        pass_cmp = _safe_int(stats.get("passing_completions")) or 0
+        pass_yds = _safe_int(stats.get("passing_yards")) or 0
+        pass_tds = _safe_int(stats.get("passing_touchdowns")) or 0
+        pass_int = _safe_int(stats.get("passing_interceptions")) or 0
+        qb_rating = _safe_float(stats.get("qb_rating"))
+        qbr = _safe_float(stats.get("qbr"))
+        
         avg_ypc = (float(rec_yards) / float(rec)) if rec else 0.0
         avg_ypr = (float(rush_yards) / float(rush_att)) if rush_att else 0.0
         photo = player_photo_url_from_name_team(name=name, team=team_abbr)
-
+        
         out.append(
             {
                 "player_id": str(pid),
                 "player_name": name,
                 "team": team_abbr,
-                "position": pos or None,
+                "position": pos or "UNK",
                 "season": season,
                 "games": games,
                 "targets": targets,
@@ -469,18 +459,20 @@ def get_players_list(
                 "photoUrl": photo,
             }
         )
-
-    # Sort: receivers by receiving yards, rushers/QBs by rushing yards (simple, UX-friendly).
+    
+    # DON'T break early! We must process ALL fetched players before sorting/slicing
+    # Otherwise players like "Stafford" (late alphabetically) get cut off
+    
+    # Sort by total production (sum of yards)
     def sort_key(r: dict[str, Any]) -> int:
-        pos = (r.get("position") or "").upper()
-        if pos == "QB":
-            return int(r.get("passingYards") or 0)
-        if pos in {"WR", "TE"}:
-            return int(r.get("receivingYards") or 0)
-        return int(r.get("rushingYards") or 0)
-
+        return (
+            int(r.get("passingYards") or 0) +
+            int(r.get("rushingYards") or 0) +
+            int(r.get("receivingYards") or 0)
+        )
+    
     out.sort(key=sort_key, reverse=True)
-    return out[: min(max(int(limit or 0), 1), len(out))]
+    return out
 
 
 def get_player_game_logs(
@@ -651,6 +643,9 @@ def receiving_dashboard(
     else:
         allowed_positions = {pos_raw}
 
+    # Defensive/special teams positions to exclude (unless user explicitly filters for them)
+    blocked_positions = {"DB", "CB", "S", "SS", "FS", "LB", "ILB", "OLB", "DL", "DE", "DT", "NT", "OL", "OT", "OG", "C", "K", "P", "LS"}
+
     out = []
     for r in stats:
         pid = _safe_int(r.get("player_id"))
@@ -658,8 +653,13 @@ def receiving_dashboard(
             continue
         p = r.get("nfl_players") or {}
         pos = (p.get("position_abbreviation") or "").strip().upper() or None
-        if (pos or "") not in allowed_positions:
-            continue
+        
+        # Allow NULL/UNK/empty positions if they have receiving stats (already filtered by query)
+        # But block defensive/special teams positions unless explicitly requested
+        if pos and pos not in allowed_positions:
+            # If user filtered for specific position, skip mismatches
+            if pos_raw not in {"", "ALL"} or pos in blocked_positions:
+                continue
         targets = _safe_int(r.get("receiving_targets")) or 0
         rec = _safe_int(r.get("receptions")) or 0
         rec_y = _safe_int(r.get("receiving_yards")) or 0
@@ -684,6 +684,10 @@ def receiving_dashboard(
                 "photoUrl": player_photo_url_from_name_team(name=name, team=team_abbr),
             }
         )
+    
+    # FORCE SORT by receiving yards descending to fix ordering issues
+    out.sort(key=lambda x: (x.get('rec_yards') or 0), reverse=True)
+    
     return out
 
 
@@ -727,6 +731,9 @@ def rushing_dashboard(
     else:
         allowed_positions = {pos_raw}
 
+    # Defensive/special teams positions to exclude (unless user explicitly filters for them)
+    blocked_positions = {"DB", "CB", "S", "SS", "FS", "LB", "ILB", "OLB", "DL", "DE", "DT", "NT", "OL", "OT", "OG", "C", "K", "P", "LS"}
+
     out = []
     for r in stats:
         pid = _safe_int(r.get("player_id"))
@@ -735,8 +742,13 @@ def rushing_dashboard(
         p = r.get("nfl_players") or {}
         name = (str(p.get("first_name") or "").strip() + " " + str(p.get("last_name") or "").strip()).strip() or str(pid)
         pos = (p.get("position_abbreviation") or "").strip().upper() or None
-        if (pos or "") not in allowed_positions:
-            continue
+        
+        # Allow NULL/UNK/empty positions if they have rushing stats (already filtered by query)
+        # But block defensive/special teams positions unless explicitly requested
+        if pos and pos not in allowed_positions:
+            # If user filtered for specific position, skip mismatches
+            if pos_raw not in {"", "ALL"} or pos in blocked_positions:
+                continue
         t = r.get("nfl_teams") or {}
         team_abbr = (t.get("abbreviation") or None)
         rush_att = _safe_int(r.get("rushing_attempts")) or 0
@@ -761,6 +773,10 @@ def rushing_dashboard(
                 "photoUrl": player_photo_url_from_name_team(name=name, team=team_abbr),
             }
         )
+    
+    # FORCE SORT by rushing yards descending to fix ordering issues
+    out.sort(key=lambda x: (x.get('rush_yards') or 0), reverse=True)
+    
     return out
 
 
@@ -778,11 +794,17 @@ def receiving_season(
     for r in rows:
         t = r.get("team") or ""
         by_team[t] = by_team.get(t, 0) + int(r.get("targets") or 0)
+    # Defensive/special teams positions to exclude
+    blocked_positions = {"DB", "CB", "S", "SS", "FS", "LB", "ILB", "OLB", "DL", "DE", "DT", "NT", "OL", "OT", "OG", "C", "K", "P", "LS"}
+    
     out = []
     for r in rows:
         pos = (r.get("position") or "").upper()
-        if pos not in {"WR", "TE", "RB"}:
-            continue
+        # Allow NULL/UNK/empty positions if they have receiving stats
+        # Block defensive/special teams positions
+        if pos and pos not in {"WR", "TE", "RB"}:
+            if pos in blocked_positions:
+                continue
         t = r.get("team") or ""
         denom = by_team.get(t, 0) or 0
         share = (float(r.get("targets") or 0) / float(denom)) if denom else None
@@ -885,8 +907,7 @@ def passing_dashboard(
         filters=filters,
         limit=5000,
     )
-    stats.sort(key=lambda r: _safe_int(r.get("passing_yards")) or 0, reverse=True)
-    stats = stats[: min(max(limit, 1), 200)]
+    # DON'T slice yet - need to filter by position first
 
     pids = sorted({_safe_int(r.get("player_id")) for r in stats if _safe_int(r.get("player_id")) is not None})
     players = sb.select("nfl_players", select="id,first_name,last_name,position_abbreviation", filters={"id": _in_list(pids)}, limit=len(pids))
@@ -900,6 +921,10 @@ def passing_dashboard(
         allowed_positions = {"QB"}
     else:
         allowed_positions = {pos_raw}
+    
+    # Defensive/special teams positions to exclude (unless user explicitly filters for them)
+    blocked_positions = {"DB", "CB", "S", "SS", "FS", "LB", "ILB", "OLB", "DL", "DE", "DT", "NT", "OL", "OT", "OG", "C", "K", "P", "LS"}
+    
     out = []
     for r in stats:
         pid = _safe_int(r.get("player_id"))
@@ -907,8 +932,13 @@ def passing_dashboard(
             continue
         p = pmap.get(pid, {})
         pos = (p.get("position_abbreviation") or "").strip().upper() or None
-        if (pos or "") not in allowed_positions:
-            continue
+        
+        # Allow NULL/UNK/empty positions if they have passing stats (already filtered by query)
+        # But block defensive/special teams positions unless explicitly requested
+        if pos and pos not in allowed_positions:
+            # If user filtered for specific position, skip mismatches
+            if pos_raw not in {"", "ALL"} or pos in blocked_positions:
+                continue
         pass_att = _safe_int(r.get("passing_attempts")) or 0
         name = (str(p.get("first_name") or "").strip() + " " + str(p.get("last_name") or "").strip()).strip() or str(pid)
         tid = _safe_int(r.get("team_id"))
@@ -928,6 +958,10 @@ def passing_dashboard(
                 "photoUrl": player_photo_url_from_name_team(name=name, team=tmap.get(tid) if tid is not None else None),
             }
         )
+    
+    # FORCE SORT by passing yards descending to fix ordering issues
+    out.sort(key=lambda x: (x.get('passing_yards') or 0), reverse=True)
+    
     return out[: min(max(limit, 1), 200)]
 
 
@@ -986,8 +1020,7 @@ def total_yards_dashboard(
         filters=filters,
         limit=5000,
     )
-    stats.sort(key=lambda r: (_safe_int(r.get("rushing_yards")) or 0) + (_safe_int(r.get("receiving_yards")) or 0), reverse=True)
-    stats = stats[: min(max(limit, 1), 200)]
+    # DON'T slice yet - need to filter by position first
 
     pids = sorted({_safe_int(r.get("player_id")) for r in stats if _safe_int(r.get("player_id")) is not None})
     players = sb.select("nfl_players", select="id,first_name,last_name,position_abbreviation", filters={"id": _in_list(pids)}, limit=len(pids))
@@ -1002,6 +1035,10 @@ def total_yards_dashboard(
         allowed_positions = {"RB"}
     else:
         allowed_positions = {pos_raw}
+    
+    # Defensive/special teams positions to exclude (unless user explicitly filters for them)
+    blocked_positions = {"DB", "CB", "S", "SS", "FS", "LB", "ILB", "OLB", "DL", "DE", "DT", "NT", "OL", "OT", "OG", "C", "K", "P", "LS"}
+    
     out = []
     for r in stats:
         pid = _safe_int(r.get("player_id"))
@@ -1009,8 +1046,13 @@ def total_yards_dashboard(
             continue
         p = pmap.get(pid, {})
         pos = (p.get("position_abbreviation") or "").strip().upper() or None
-        if pos is None or pos.upper() not in allowed_positions:
-            continue
+        
+        # Allow NULL/UNK/empty positions if they have yards (already filtered by query)
+        # But block defensive/special teams positions unless explicitly requested
+        if pos and pos not in allowed_positions:
+            # If user filtered for specific position, skip mismatches
+            if pos_raw not in {"", "ALL"} or pos in blocked_positions:
+                continue
         name = (str(p.get("first_name") or "").strip() + " " + str(p.get("last_name") or "").strip()).strip() or str(pid)
         tid = _safe_int(r.get("team_id"))
         rush_y = _safe_int(r.get("rushing_yards")) or 0
@@ -1053,12 +1095,18 @@ def total_yards_season(
     else:
         allowed_positions = {pos_raw}
 
+    # Defensive/special teams positions to exclude (unless user explicitly filters for them)
+    blocked_positions = {"DB", "CB", "S", "SS", "FS", "LB", "ILB", "OLB", "DL", "DE", "DT", "NT", "OL", "OT", "OG", "C", "K", "P", "LS"}
+
     rows = get_players_list(sb, season=season, position=None, team=team, limit=8000)
     out: list[dict[str, Any]] = []
     for r in rows:
         pos = (str(r.get("position") or "")).strip().upper()
-        if pos not in allowed_positions:
-            continue
+        # Allow NULL/UNK/empty positions if they have yards
+        # Block defensive/special teams positions unless explicitly requested
+        if pos and pos not in allowed_positions:
+            if pos_raw not in {"", "ALL"} or pos in blocked_positions:
+                continue
         rush_y = int(r.get("rushingYards") or 0)
         rec_y = int(r.get("receivingYards") or 0)
         rush_td = int(r.get("rushingTouchdowns") or 0)

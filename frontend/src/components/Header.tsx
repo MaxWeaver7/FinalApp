@@ -19,7 +19,7 @@ export function Header() {
   }, [settingsOpen]);
 
   return (
-    <header className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
+    <header className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-[999]">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <NavLink to="/" className="flex items-center gap-3 group">
@@ -75,13 +75,13 @@ export function Header() {
                 {/* click-outside backdrop */}
                 <button
                   type="button"
-                  className="fixed inset-0 z-40 cursor-default"
+                  className="fixed inset-0 z-[9998] cursor-default"
                   aria-label="Close settings"
                   onClick={() => setSettingsOpen(false)}
                 />
 
                 <div
-                  className="absolute right-0 mt-2 w-64 rounded-xl border border-border bg-card shadow-lg p-3 z-50"
+                  className="fixed top-20 right-4 w-64 rounded-xl border border-border bg-card shadow-lg p-3 z-[9999]"
                   role="dialog"
                   aria-label="Settings"
                 >
