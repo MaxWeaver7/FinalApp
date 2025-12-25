@@ -3,6 +3,7 @@ import { Player } from "@/types/player";
 import { cn, formatStat } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 import { TeamLogo } from "./TeamLogo";
+import { getTeamColors } from "@/config/nfl-teams";
 
 interface PlayerCardProps {
   player: Player;
@@ -15,6 +16,7 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
   const isReceiver = ['WR', 'TE'].includes(player.position || '');
   const isQB = (player.position || '').toUpperCase() === 'QB';
   const seasonTotals = player.seasonTotals || player;
+  const { primary, secondary } = getTeamColors(player.team);
   const primaryStat = isQB
     ? (seasonTotals.passingYards || 0)
     : isReceiver
@@ -37,26 +39,44 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
     >
       <div className="flex items-center gap-4">
         <div className="relative">
-          <div className="w-14 h-14 rounded-full bg-secondary overflow-hidden ring-2 ring-border">
-            {showImage ? (
-              <img
-                src={photoUrl}
-                alt={player.player_name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={() => {
-                  setImgError(true);
-                }}
-              />
-            ) : null}
-            <div className={cn(
-              "w-full h-full flex items-center justify-center text-muted-foreground text-lg font-bold",
-              showImage && "hidden"
-            )}>
-              {player.player_name.split(' ').map(n => n[0]).join('')}
+          <div className="relative w-14 h-14">
+            {/* Team Aura */}
+            <div
+              data-testid="player-team-aura"
+              className="absolute inset-0 rounded-full blur-md opacity-40 animate-pulse"
+              style={{
+                background: `linear-gradient(135deg, ${primary}, ${secondary})`,
+              }}
+            />
+
+            {/* Image Container */}
+            <div
+              data-testid="player-headshot-container"
+              className="relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-border shadow-inner"
+              style={{ backgroundColor: primary }}
+            >
+              {showImage ? (
+                <img
+                  src={photoUrl}
+                  alt={player.player_name}
+                  className="w-full h-full object-cover relative z-10"
+                  loading="lazy"
+                  onError={() => {
+                    setImgError(true);
+                  }}
+                />
+              ) : null}
+              <div
+                className={cn(
+                  "w-full h-full flex items-center justify-center text-white text-lg font-bold",
+                  showImage && "hidden"
+                )}
+              >
+                {player.player_name.split(' ').map(n => n[0]).join('')}
+              </div>
             </div>
           </div>
-          <div className="absolute -bottom-1 -right-1 bg-secondary text-xs font-bold px-1.5 py-0.5 rounded-md border border-border">
+          <div className="absolute -bottom-1 -right-1 bg-secondary text-xs font-bold px-1.5 py-0.5 rounded-md border border-border z-20">
             {player.position}
           </div>
         </div>

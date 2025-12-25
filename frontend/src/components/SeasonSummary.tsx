@@ -5,6 +5,7 @@ import { CountUp } from "./common/CountUp";
 import { cn, formatStat, getStatTrend } from "@/lib/utils";
 import { TeamLogo } from "./TeamLogo";
 import { useState, useMemo } from "react";
+import { getTeamColors } from "@/config/nfl-teams";
 
 interface SeasonSummaryProps {
   player: Player;
@@ -18,7 +19,8 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
   const photoUrl = player.photoUrl;
   const [imgError, setImgError] = useState(false);
   const showImage = !!photoUrl && !imgError;
-  const accent = player.teamColors?.primary || "";
+  const { primary, secondary } = getTeamColors(player.team);
+  const accent = player.teamColors?.primary || primary || "";
 
   const chips: string[] = [];
   if (player.jersey_number) chips.push(`#${player.jersey_number}`);
@@ -57,23 +59,39 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 opacity-0 animate-slide-up" style={{ animationDelay: '100ms' }}>
-        <div className="w-20 h-20 rounded-2xl bg-secondary overflow-hidden ring-2 ring-border">
-          {showImage ? (
-            <img
-              src={photoUrl}
-              alt={player.player_name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onError={() => {
-                setImgError(true);
-              }}
-            />
-          ) : null}
-          <div className={cn(
-            "w-full h-full flex items-center justify-center text-muted-foreground text-2xl font-bold",
-            showImage && "hidden"
-          )}>
-            {player.player_name.split(' ').map(n => n[0]).join('')}
+        <div className="relative">
+          {/* 1. The Super Aura (Larger for Detail View) */}
+          <div
+            data-testid="season-summary-team-aura"
+            className="absolute inset-0 rounded-full blur-md opacity-40 animate-pulse"
+            style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
+          />
+
+          {/* 2. The Coin (Larger w-20 h-20) */}
+          <div
+            data-testid="season-summary-headshot-container"
+            className="relative z-10 w-20 h-20 rounded-full overflow-hidden ring-2 ring-border shadow-inner"
+            style={{ backgroundColor: primary }}
+          >
+            {showImage ? (
+              <img
+                src={photoUrl}
+                alt={player.player_name}
+                className="w-full h-full object-cover relative z-10"
+                loading="lazy"
+                onError={() => {
+                  setImgError(true);
+                }}
+              />
+            ) : null}
+            <div
+              className={cn(
+                "w-full h-full flex items-center justify-center text-white text-2xl font-bold",
+                showImage && "hidden"
+              )}
+            >
+              {player.player_name.split(' ').map(n => n[0]).join('')}
+            </div>
           </div>
         </div>
         <div>
