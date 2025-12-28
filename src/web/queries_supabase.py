@@ -1765,7 +1765,7 @@ def smash_feed(
     sb: SupabaseClient, 
     season: int, 
     week: int, 
-    limit: int = 10
+    limit: int = 25
 ) -> list[dict[str, Any]]:
     """
     Unified Smash Spot Feed: Returns top betting opportunities across all positions.
