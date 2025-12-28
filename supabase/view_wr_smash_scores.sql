@@ -160,10 +160,10 @@ wr_matchups AS (
     tpv.avg_pass_attempts_per_game AS team_pass_volume,
     pp.receiving_yards_line AS dk_line,
     
-    (CASE WHEN wr.air_yards_share >= 0.40 THEN 1.0 WHEN wr.air_yards_share >= 0.35 THEN 0.85 WHEN wr.air_yards_share >= 0.30 THEN 0.65 WHEN wr.air_yards_share >= 0.25 THEN 0.45 WHEN wr.air_yards_share >= 0.20 THEN 0.25 ELSE 0.1 END) * 30.0 AS air_share_score,
+    (CASE WHEN wr.air_yards_share >= 0.40 THEN 1.0 WHEN wr.air_yards_share >= 0.35 THEN 0.85 WHEN wr.air_yards_share >= 0.30 THEN 0.65 WHEN wr.air_yards_share >= 0.25 THEN 0.45 WHEN wr.air_yards_share >= 0.20 THEN 0.25 ELSE 0.1 END) * 25.0 AS air_share_score,
     (CASE WHEN wr.adot >= 14.0 THEN 1.0 WHEN wr.adot >= 12.0 THEN 0.85 WHEN wr.adot >= 10.0 THEN 0.65 WHEN wr.adot >= 8.0 THEN 0.45 ELSE 0.2 END) * 15.0 AS adot_score,
     (CASE WHEN wr.avg_separation >= 3.5 THEN 1.0 WHEN wr.avg_separation >= 3.0 THEN 0.80 WHEN wr.avg_separation >= 2.5 THEN 0.55 WHEN wr.avg_separation >= 2.0 THEN 0.30 ELSE 0.1 END) * 10.0 AS separation_score,
-    (COALESCE(opp.pass_def_funnel_percentile, 0.5)) * 15.0 AS matchup_score,
+    (COALESCE(opp.pass_def_funnel_percentile, 0.5)) * 12.0 AS matchup_score,
     (CASE WHEN qb.avg_time_to_throw >= 3.0 THEN 1.0 WHEN qb.avg_time_to_throw >= 2.8 THEN 0.80 WHEN qb.avg_time_to_throw >= 2.6 THEN 0.60 WHEN qb.avg_time_to_throw >= 2.4 THEN 0.40 ELSE 0.2 END) * 5.0 AS qb_time_score,
     (CASE WHEN qb.cpoe >= 3.0 THEN 1.0 WHEN qb.cpoe >= 2.0 THEN 0.80 WHEN qb.cpoe >= 1.0 THEN 0.60 WHEN qb.cpoe >= 0.0 THEN 0.40 ELSE 0.2 END) * 5.0 AS qb_efficiency_score,
     (CASE 
@@ -173,7 +173,7 @@ wr_matchups AS (
       ELSE 0.25
     END) * 10.0 AS game_script_score,
     (CASE WHEN wr.catch_percentage >= 70.0 THEN 1.0 WHEN wr.catch_percentage >= 65.0 THEN 0.80 WHEN wr.catch_percentage >= 60.0 THEN 0.55 WHEN wr.catch_percentage >= 55.0 THEN 0.30 ELSE 0.1 END) * 5.0 AS catch_rate_score,
-    (CASE WHEN wr.targets_per_game >= 10.0 THEN 1.0 WHEN wr.targets_per_game >= 8.0 THEN 0.80 WHEN wr.targets_per_game >= 6.0 THEN 0.55 WHEN wr.targets_per_game >= 4.0 THEN 0.30 ELSE 0.1 END) * 5.0 AS volume_score
+    (CASE WHEN wr.targets_per_game >= 10.0 THEN 1.0 WHEN wr.targets_per_game >= 8.0 THEN 0.80 WHEN wr.targets_per_game >= 6.0 THEN 0.55 WHEN wr.targets_per_game >= 4.0 THEN 0.30 ELSE 0.1 END) * 15.0 AS volume_score
 
   FROM wr_season_stats wr
   INNER JOIN upcoming_games ug ON wr.team_id IN (ug.home_team_id, ug.visitor_team_id)

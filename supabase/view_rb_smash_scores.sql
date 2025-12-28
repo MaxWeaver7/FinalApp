@@ -166,7 +166,7 @@ rb_matchups AS (
     tr.win_pct AS team_win_pct,
     pp.rushing_yards_line AS dk_line,
     
-    (COALESCE(opp.run_def_funnel_percentile, 0.5)) * 20.0 AS run_funnel_score,
+    (COALESCE(opp.run_def_funnel_percentile, 0.5)) * 15.0 AS run_funnel_score,
     (CASE 
       WHEN opp.turnover_differential <= -8 THEN 1.0
       WHEN opp.turnover_differential <= -5 THEN 0.85
@@ -189,8 +189,8 @@ rb_matchups AS (
       WHEN opp.opp_points_per_game >= 20.0 THEN 0.40 
       ELSE 0.2 
     END) * 10.0 AS discipline_score,
-    (CASE WHEN rb.rush_att_per_game >= 18.0 THEN 1.0 WHEN rb.rush_att_per_game >= 15.0 THEN 0.85 WHEN rb.rush_att_per_game >= 12.0 THEN 0.65 WHEN rb.rush_att_per_game >= 9.0 THEN 0.40 ELSE 0.15 END) * 15.0 AS volume_score,
-    (CASE WHEN rb.receiving_targets >= 60 THEN 1.0 WHEN rb.receiving_targets >= 40 THEN 0.75 WHEN rb.receiving_targets >= 25 THEN 0.50 WHEN rb.receiving_targets >= 10 THEN 0.25 ELSE 0.0 END) * 5.0 AS receiving_upside_score
+    (CASE WHEN rb.rush_att_per_game >= 18.0 THEN 1.0 WHEN rb.rush_att_per_game >= 15.0 THEN 0.85 WHEN rb.rush_att_per_game >= 12.0 THEN 0.65 WHEN rb.rush_att_per_game >= 9.0 THEN 0.40 ELSE 0.15 END) * 18.0 AS volume_score,
+    (CASE WHEN rb.receiving_targets >= 60 THEN 1.0 WHEN rb.receiving_targets >= 40 THEN 0.75 WHEN rb.receiving_targets >= 25 THEN 0.50 WHEN rb.receiving_targets >= 10 THEN 0.25 ELSE 0.0 END) * 8.0 AS receiving_upside_score
   FROM rb_season_stats rb
   INNER JOIN upcoming_games ug ON rb.team_id IN (ug.home_team_id, ug.visitor_team_id)
   INNER JOIN nfl_teams tm_player ON tm_player.id = rb.team_id

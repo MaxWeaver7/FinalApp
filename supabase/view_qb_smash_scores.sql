@@ -187,19 +187,20 @@ qb_matchups AS (
     wr.avg_wr_separation,
     pp.passing_yards_line AS dk_line,
     
-    (LEAST((COALESCE(opp.pass_rush_ease_percentile, 0.5) * 0.60) + (COALESCE(oline.oline_quality_percentile, 0.5) * 0.40), 1.0)) * 15.0 AS pocket_protection_score,
-    (COALESCE(gb.shootout_indicator, 0)) * 25.0 AS shootout_score,
-    (COALESCE(opp.pass_def_funnel_percentile, 0.5)) * 15.0 AS pass_funnel_score,
+    (LEAST((COALESCE(opp.pass_rush_ease_percentile, 0.5) * 0.60) + (COALESCE(oline.oline_quality_percentile, 0.5) * 0.40), 1.0)) * 12.0 AS pocket_protection_score,
+    (COALESCE(gb.shootout_indicator, 0)) * 20.0 AS shootout_score,
+    (COALESCE(opp.pass_def_funnel_percentile, 0.5)) * 12.0 AS pass_funnel_score,
     (CASE WHEN qb.cpoe >= 4.0 THEN 1.0 WHEN qb.cpoe >= 2.5 THEN 0.85 WHEN qb.cpoe >= 1.0 THEN 0.70 WHEN qb.cpoe >= 0.0 THEN 0.50 WHEN qb.cpoe >= -1.0 THEN 0.30 ELSE 0.15 END) * 15.0 AS efficiency_score,
     (CASE WHEN qb.aggressiveness >= 18.0 THEN 1.0 WHEN qb.aggressiveness >= 15.0 THEN 0.80 WHEN qb.aggressiveness >= 12.0 THEN 0.60 WHEN qb.aggressiveness >= 9.0 THEN 0.40 ELSE 0.20 END) * 10.0 AS aggressiveness_score,
+    (CASE WHEN qb.pass_att_per_game >= 36.0 THEN 1.0 WHEN qb.pass_att_per_game >= 32.0 THEN 0.85 WHEN qb.pass_att_per_game >= 28.0 THEN 0.65 WHEN qb.pass_att_per_game >= 24.0 THEN 0.40 ELSE 0.15 END) * 12.0 AS volume_score,
     (CASE 
       WHEN (CASE WHEN qb.team_id = ug.home_team_id AND gb.spread_home > 0 THEN 1.0 WHEN qb.team_id = ug.visitor_team_id AND gb.spread_home < 0 THEN 1.0 ELSE 0.0 END) = 1.0 AND (CASE WHEN qb.team_id = ug.home_team_id THEN gb.spread_home ELSE gb.spread_away END) >= 7.0 THEN 1.0
       WHEN (CASE WHEN qb.team_id = ug.home_team_id AND gb.spread_home > 0 THEN 1.0 WHEN qb.team_id = ug.visitor_team_id AND gb.spread_home < 0 THEN 1.0 ELSE 0.0 END) = 1.0 AND (CASE WHEN qb.team_id = ug.home_team_id THEN gb.spread_home ELSE gb.spread_away END) >= 3.5 THEN 0.80
       WHEN (CASE WHEN qb.team_id = ug.home_team_id AND gb.spread_home > 0 THEN 1.0 WHEN qb.team_id = ug.visitor_team_id AND gb.spread_home < 0 THEN 1.0 ELSE 0.0 END) = 1.0 AND (CASE WHEN qb.team_id = ug.home_team_id THEN gb.spread_home ELSE gb.spread_away END) >= 3.5 THEN 0.60
       WHEN (CASE WHEN qb.team_id = ug.home_team_id THEN gb.spread_home ELSE gb.spread_away END) BETWEEN -3.0 AND 3.0 THEN 0.50 
       ELSE 0.30
-    END) * 10.0 AS script_score,
-    (CASE WHEN opp.opp_red_zone_scoring_pct >= 65.0 THEN 1.0 WHEN opp.opp_red_zone_scoring_pct >= 60.0 THEN 0.85 WHEN opp.opp_red_zone_scoring_pct >= 55.0 THEN 0.65 WHEN opp.opp_red_zone_scoring_pct >= 50.0 THEN 0.45 ELSE 0.25 END) * 10.0 AS red_zone_score
+    END) * 8.0 AS script_score,
+    (CASE WHEN opp.opp_red_zone_scoring_pct >= 65.0 THEN 1.0 WHEN opp.opp_red_zone_scoring_pct >= 60.0 THEN 0.85 WHEN opp.opp_red_zone_scoring_pct >= 55.0 THEN 0.65 WHEN opp.opp_red_zone_scoring_pct >= 50.0 THEN 0.45 ELSE 0.25 END) * 8.0 AS red_zone_score
   FROM qb_season_stats qb
   INNER JOIN upcoming_games ug ON qb.team_id IN (ug.home_team_id, ug.visitor_team_id)
   INNER JOIN nfl_teams tm_player ON tm_player.id = qb.team_id
@@ -252,6 +253,7 @@ SELECT
   ROUND(COALESCE(pass_funnel_score, 0)::numeric, 1) AS pass_funnel_score,
   ROUND(COALESCE(efficiency_score, 0)::numeric, 1) AS efficiency_score,
   ROUND(COALESCE(aggressiveness_score, 0)::numeric, 1) AS aggressiveness_score,
+  ROUND(COALESCE(volume_score, 0)::numeric, 1) AS volume_score,
   ROUND(COALESCE(script_score, 0)::numeric, 1) AS script_score,
   ROUND(COALESCE(red_zone_score, 0)::numeric, 1) AS red_zone_score,
   ROUND(
@@ -261,6 +263,7 @@ SELECT
       COALESCE(pass_funnel_score, 0) + 
       COALESCE(efficiency_score, 0) + 
       COALESCE(aggressiveness_score, 0) + 
+      COALESCE(volume_score, 0) + 
       COALESCE(script_score, 0) + 
       COALESCE(red_zone_score, 0)
     )::numeric,
