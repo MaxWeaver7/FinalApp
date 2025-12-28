@@ -191,7 +191,13 @@ rb_matchups AS (
       ELSE 0.2 
     END) * 10.0 AS discipline_score,
     (CASE WHEN rb.rush_att_per_game >= 18.0 THEN 1.0 WHEN rb.rush_att_per_game >= 15.0 THEN 0.85 WHEN rb.rush_att_per_game >= 12.0 THEN 0.65 WHEN rb.rush_att_per_game >= 9.0 THEN 0.40 ELSE 0.15 END)
-      * (CASE WHEN rb_team_rank = 1 THEN 1.0 WHEN rb_team_rank = 2 THEN 0.75 ELSE 0.50 END)
+      * (
+        CASE 
+          WHEN DENSE_RANK() OVER (PARTITION BY rb.team_id ORDER BY rb.touches_per_game DESC) = 1 THEN 1.0
+          WHEN DENSE_RANK() OVER (PARTITION BY rb.team_id ORDER BY rb.touches_per_game DESC) = 2 THEN 0.75
+          ELSE 0.50
+        END
+      )
       * 18.0 AS volume_score,
     (CASE WHEN rb.receiving_targets >= 60 THEN 1.0 WHEN rb.receiving_targets >= 40 THEN 0.75 WHEN rb.receiving_targets >= 25 THEN 0.50 WHEN rb.receiving_targets >= 10 THEN 0.25 ELSE 0.0 END) * 8.0 AS receiving_upside_score
   FROM rb_season_stats rb
