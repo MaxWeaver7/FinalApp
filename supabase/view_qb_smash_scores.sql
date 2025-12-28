@@ -253,7 +253,6 @@ SELECT
   ROUND(COALESCE(pass_funnel_score, 0)::numeric, 1) AS pass_funnel_score,
   ROUND(COALESCE(efficiency_score, 0)::numeric, 1) AS efficiency_score,
   ROUND(COALESCE(aggressiveness_score, 0)::numeric, 1) AS aggressiveness_score,
-  ROUND(COALESCE(volume_score, 0)::numeric, 1) AS volume_score,
   ROUND(COALESCE(script_score, 0)::numeric, 1) AS script_score,
   ROUND(COALESCE(red_zone_score, 0)::numeric, 1) AS red_zone_score,
   ROUND(
