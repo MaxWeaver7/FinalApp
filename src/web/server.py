@@ -1025,7 +1025,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "missing season or week"}, code=400)
                 return
             
-            limit = int(qs.get("limit", ["10"])[0])  # Default to top 10
+            limit = int(qs.get("limit", ["25"])[0])  # Default to top 25
             
             spots = queries_supabase.smash_feed(sb, season=season, week=week, limit=limit)
             self._json({"rows": spots})  # Changed from "spots" to "rows" for frontend compatibility
