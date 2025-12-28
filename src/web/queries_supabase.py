@@ -1906,10 +1906,21 @@ def smash_feed(
                 for spot in pos_spots:
                     spot['smash_score'] = round(spot['smash_score'] * scale_factor)
     
-    # Sort by smash_score descending
-    all_spots.sort(key=lambda x: x["smash_score"], reverse=True)
-    
-    # Return top N
-    return all_spots[:min(limit, len(all_spots))]
+    # Per-position caps (ensure breadth across positions)
+    qb_limit = 25
+    rb_limit = 25
+    wr_limit = 25
+    te_limit = 25  # TE included in WR view; we'll split by position flag
+
+    qbs = [s for s in all_spots if (s.get("position") or "").upper() == "QB"][:qb_limit]
+    rbs = [s for s in all_spots if (s.get("position") or "").upper() == "RB"][:rb_limit]
+    wrs = [s for s in all_spots if (s.get("position") or "").upper() == "WR"][:wr_limit]
+    tes = [s for s in all_spots if (s.get("position") or "").upper() == "TE"][:te_limit]
+
+    combined = qbs + rbs + wrs + tes
+    combined.sort(key=lambda x: x["smash_score"], reverse=True)
+
+    # Final cap by requested limit to avoid giant payloads
+    return combined[:min(limit, len(combined))]
 
 
