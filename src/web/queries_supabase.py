@@ -1783,25 +1783,26 @@ def smash_feed(
     """
     
     # Query top 15 per position (total pool of 45 players)
+    per_pos_limit = max(limit, 25)
     wr_rows = sb.select(
         "model_wr_smash",
         select="*",
         filters={"season": f"eq.{int(season)}", "week": f"eq.{int(week)}"},
-        limit=15,
+        limit=per_pos_limit,
     )
     
     rb_rows = sb.select(
         "model_rb_smash",
         select="*",
         filters={"season": f"eq.{int(season)}", "week": f"eq.{int(week)}"},
-        limit=15,
+        limit=per_pos_limit,
     )
     
     qb_rows = sb.select(
         "model_qb_smash",
         select="*",
         filters={"season": f"eq.{int(season)}", "week": f"eq.{int(week)}"},
-        limit=15,
+        limit=per_pos_limit,
     )
     
     # Merge all results
