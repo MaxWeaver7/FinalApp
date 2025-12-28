@@ -1013,6 +1013,24 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"rows": rows})
             return
 
+        # Smash Spot Feed (NFL Betting Opportunities)
+        if path == "/api/feed/smash-spots":
+            if sb is None:
+                self._json({"error": "Supabase not configured"}, code=503)
+                return
+            
+            season = q_int("season")
+            week = q_int("week")
+            if season is None or week is None:
+                self._json({"error": "missing season or week"}, code=400)
+                return
+            
+            limit = int(qs.get("limit", ["10"])[0])  # Default to top 10
+            
+            spots = queries_supabase.smash_feed(sb, season=season, week=week, limit=limit)
+            self._json({"rows": spots})  # Changed from "spots" to "rows" for frontend compatibility
+            return
+
         # Legacy endpoints for old UI
         if path.startswith("/player/"):
             player_id = path.split("/player/", 1)[1].strip()

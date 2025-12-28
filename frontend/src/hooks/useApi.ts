@@ -31,9 +31,6 @@ export function usePlayers(
 ) {
   const params = new URLSearchParams();
   if (season) params.set('season', season.toString());
-  if (position) params.set('position', position);
-  if (team) params.set('team', team);
-  if (q && q.trim().length >= 2) params.set('q', q.trim());
   params.set('offset', String(Math.max(offset || 0, 0)));
   params.set('limit', String(Math.max(limit || 0, 1)));
   

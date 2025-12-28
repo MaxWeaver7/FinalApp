@@ -55,6 +55,17 @@ export function Header() {
             >
               Leaderboards
             </NavLink>
+            <NavLink
+              to="/smash-feed"
+              className={({ isActive }) =>
+                cn(
+                  "px-3 py-1.5 rounded-lg text-sm transition-colors font-semibold",
+                  isActive ? "bg-gradient-to-r from-primary/20 to-emerald-500/20 text-primary" : "text-muted-foreground hover:text-primary"
+                )
+              }
+            >
+              ⚡ Smash Feed
+            </NavLink>
           </nav>
         </div>
 

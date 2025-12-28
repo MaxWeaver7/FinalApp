@@ -8,8 +8,6 @@ interface PlayerDossierSkeletonProps {
 export function PlayerDossierSkeleton({ position, className }: PlayerDossierSkeletonProps) {
   // Determine grid columns based on position
   const isQB = (position || '').toUpperCase() === 'QB';
-  const isReceiver = ['WR', 'TE'].includes((position || '').toUpperCase());
-  
   // QB has 5 stat cards, others have 4
   const statCount = isQB ? 5 : 4;
   

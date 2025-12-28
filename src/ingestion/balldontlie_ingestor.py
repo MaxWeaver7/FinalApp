@@ -3,159 +3,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable
 
 from src.database.supabase_client import SupabaseClient
-from src.ingestion.balldontlie_client import BallDontLieError, BallDontLieNFLClient
+from src.ingestion.balldontlie_client import BallDontLieNFLClient
 
 
 logger = logging.getLogger(__name__)
 
-# Fail-fast safety thresholds (per endpoint call: season+week+postseason+kind)
-_ADV_MAX_DROPPED_ROWS = 25
-_ADV_MAX_DROPPED_FRACTION = 0.05
-_ADV_MAX_TRANSIENT_API_ERRORS = 30
-
-_ADV_INT_FIELDS = {
-    # Keys
-    "player_id",
-    "season",
-    "week",
-    # Receiving
-    "receptions",
-    "targets",
-    "yards",
-    "rec_touchdowns",
-    # Rushing
-    "rush_attempts",
-    "rush_yards",
-    "rush_touchdowns",
-    # Passing
-    "attempts",
-    "completions",
-    "pass_yards",
-    "pass_touchdowns",
-    "interceptions",
-    "games_played",
-}
-
-_ADV_FLOAT_FIELDS = {
-    # Receiving
-    "avg_intended_air_yards",
-    "avg_yac",
-    "avg_expected_yac",
-    "avg_yac_above_expectation",
-    "catch_percentage",
-    "avg_cushion",
-    "avg_separation",
-    "percent_share_of_intended_air_yards",
-    # Rushing
-    "efficiency",
-    "avg_rush_yards",
-    "avg_time_to_los",
-    "expected_rush_yards",
-    "rush_yards_over_expected",
-    "rush_yards_over_expected_per_att",
-    "rush_pct_over_expected",
-    "percent_attempts_gte_eight_defenders",
-    # Passing
-    "passer_rating",
-    "completion_percentage",
-    "completion_percentage_above_expectation",
-    "expected_completion_percentage",
-    "avg_time_to_throw",
-    "avg_intended_air_yards",
-    "avg_completed_air_yards",
-    "avg_air_distance",
-    "avg_air_yards_differential",
-    "avg_air_yards_to_sticks",
-    "max_air_distance",
-    "max_completed_air_distance",
-    "aggressiveness",
-}
-
-
-def _coerce_int(v: Any) -> Optional[int]:
-    if v in (None, ""):
-        return None
-    if isinstance(v, bool):
-        return int(v)
-    try:
-        return int(v)
-    except Exception:
-        return None
-
-
-def _coerce_float(v: Any) -> Optional[float]:
-    if v in (None, ""):
-        return None
-    if isinstance(v, bool):
-        return float(int(v))
-    try:
-        return float(v)
-    except Exception:
-        return None
-
-
-def _coerce_bool(v: Any, *, default: bool = False) -> bool:
-    if v is None:
-        return default
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, (int, float)):
-        return bool(int(v))
-    if isinstance(v, str):
-        return v.strip().lower() in {"1", "true", "yes", "y", "on"}
-    return default
-
-
-def _normalize_adv_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
-    """
-    Normalize + validate an advanced-stats row.
-
-    Returns a cleaned row or None to skip it.
-    """
-    pid = _coerce_int(row.get("player_id"))
-    season = _coerce_int(row.get("season"))
-    week = _coerce_int(row.get("week"))
-    postseason = _coerce_bool(row.get("postseason"), default=False)
-    if pid is None or season is None or week is None:
-        return None
-
-    out: dict[str, Any] = dict(row)
-    out["player_id"] = pid
-    out["season"] = season
-    out["week"] = week
-    out["postseason"] = postseason
-
-    # Coerce numeric fields to reduce PostgREST cast errors.
-    for k in list(out.keys()):
-        if k in _ADV_INT_FIELDS:
-            out[k] = _coerce_int(out.get(k))
-        elif k in _ADV_FLOAT_FIELDS:
-            out[k] = _coerce_float(out.get(k))
-
-    # Skip rows that are essentially empty beyond keys.
-    has_metric = False
-    for k, v in out.items():
-        if k in {"player_id", "season", "week", "postseason", "updated_at"}:
-            continue
-        if v not in (None, ""):
-            has_metric = True
-            break
-    if not has_metric:
-        return None
-
-    return out
-
-
-def _is_transient_bdl_error(err: Exception) -> bool:
-    """
-    BallDontLie occasionally returns transient 429/5xx for GOAT endpoints.
-    We treat these as skippable for a single (season, week, postseason, endpoint) call.
-    """
-    msg = str(err)
-    return ("HTTP 429" in msg) or ("HTTP 5" in msg) or ("Request failed" in msg)
 
 @dataclass(frozen=True)
 class CoreIngestSummary:
@@ -325,10 +180,6 @@ def map_adv_receiving(s: dict[str, Any]) -> dict[str, Any]:
         "avg_expected_yac": s.get("avg_expected_yac"),
         "avg_yac_above_expectation": s.get("avg_yac_above_expectation"),
         "catch_percentage": s.get("catch_percentage"),
-        "avg_cushion": s.get("avg_cushion"),
-        "avg_separation": s.get("avg_separation"),
-        "percent_share_of_intended_air_yards": s.get("percent_share_of_intended_air_yards"),
-        "rec_touchdowns": s.get("rec_touchdowns"),
         "updated_at": _now_iso(),
     }
 
@@ -343,15 +194,11 @@ def map_adv_rushing(s: dict[str, Any]) -> dict[str, Any]:
         "postseason": s.get("postseason", False),
         "rush_attempts": s.get("rush_attempts"),
         "rush_yards": s.get("rush_yards"),
-        "rush_touchdowns": s.get("rush_touchdowns"),
         "efficiency": s.get("efficiency"),
         "avg_rush_yards": s.get("avg_rush_yards"),
-        "avg_time_to_los": s.get("avg_time_to_los"),
         "expected_rush_yards": s.get("expected_rush_yards"),
         "rush_yards_over_expected": s.get("rush_yards_over_expected"),
         "rush_yards_over_expected_per_att": s.get("rush_yards_over_expected_per_att"),
-        "rush_pct_over_expected": s.get("rush_pct_over_expected"),
-        "percent_attempts_gte_eight_defenders": s.get("percent_attempts_gte_eight_defenders"),
         "updated_at": _now_iso(),
     }
 
@@ -372,17 +219,10 @@ def map_adv_passing(s: dict[str, Any]) -> dict[str, Any]:
         "passer_rating": s.get("passer_rating"),
         "completion_percentage": s.get("completion_percentage"),
         "completion_percentage_above_expectation": s.get("completion_percentage_above_expectation"),
-        "expected_completion_percentage": s.get("expected_completion_percentage"),
         "avg_time_to_throw": s.get("avg_time_to_throw"),
         "avg_intended_air_yards": s.get("avg_intended_air_yards"),
         "avg_completed_air_yards": s.get("avg_completed_air_yards"),
-        "avg_air_distance": s.get("avg_air_distance"),
-        "avg_air_yards_differential": s.get("avg_air_yards_differential"),
-        "avg_air_yards_to_sticks": s.get("avg_air_yards_to_sticks"),
-        "max_air_distance": s.get("max_air_distance"),
-        "max_completed_air_distance": s.get("max_completed_air_distance"),
         "aggressiveness": s.get("aggressiveness"),
-        "games_played": s.get("games_played"),
         "updated_at": _now_iso(),
     }
 
@@ -432,8 +272,6 @@ def ingest_stats_and_advanced(
     include_season_stats: bool = True,
     include_game_stats: bool = True,
     include_advanced: bool = True,
-    advanced_weeks: Optional[list[int]] = None,
-    advanced_include_postseason: bool = True,
 ) -> StatsIngestSummary:
     season_stats_upserted = 0
     # Season stats
@@ -462,97 +300,13 @@ def ingest_stats_and_advanced(
     adv_rushing_upserted = 0
     adv_passing_upserted = 0
     if include_advanced:
-        transient_api_errors = 0
-        weeks = advanced_weeks if advanced_weeks is not None else list(range(0, 19))
-        postseason_vals = [False, True] if advanced_include_postseason else [False]
         for season in seasons:
-            for postseason in postseason_vals:
-                # Important: "postseason week 1" is a logical contradiction. The API may 500 on such requests.
-                # We only fetch postseason totals (week=0) unless you explicitly change this logic.
-                weeks_to_fetch = weeks if not postseason else [0]
-                logger.info("Ingesting advanced stats: season=%s postseason=%s weeks=%s", season, postseason, weeks_to_fetch)
-                for week in weeks_to_fetch:
-                    def _iter_adv_rows(kind: str, raw_iter: Iterable[dict[str, Any]], mapper) -> Iterable[dict[str, Any]]:
-                        total = 0
-                        dropped = 0
-                        nonlocal transient_api_errors
-                        try:
-                            for raw in raw_iter:
-                                total += 1
-                                mapped = mapper(raw)
-                                normalized = _normalize_adv_row(mapped)
-                                if normalized is None:
-                                    dropped += 1
-                                    if dropped > _ADV_MAX_DROPPED_ROWS or (
-                                        total >= 25 and (dropped / max(total, 1)) > _ADV_MAX_DROPPED_FRACTION
-                                    ):
-                                        raise ValueError(
-                                            f"Too many invalid advanced rows kind={kind} season={season} week={week} postseason={postseason} "
-                                            f"dropped={dropped} total={total}"
-                                        )
-                                    continue
-                                yield normalized
-                        except BallDontLieError as e:
-                            if _is_transient_bdl_error(e):
-                                transient_api_errors += 1
-                                logger.warning(
-                                    "Transient BallDontLie error (skipping this slice) kind=%s season=%s week=%s postseason=%s err=%s",
-                                    kind,
-                                    season,
-                                    week,
-                                    postseason,
-                                    e,
-                                )
-                                if transient_api_errors > _ADV_MAX_TRANSIENT_API_ERRORS:
-                                    raise ValueError(
-                                        f"Too many transient BallDontLie errors during advanced ingestion: {transient_api_errors}"
-                                    ) from e
-                                continue
-                            raise
-                        if dropped:
-                            logger.warning(
-                                "Advanced rows dropped kind=%s season=%s week=%s postseason=%s dropped=%s total=%s",
-                                kind,
-                                season,
-                                week,
-                                postseason,
-                                dropped,
-                                total,
-                            )
-
-                    for chunk in _chunked(
-                        _iter_adv_rows(
-                            "receiving",
-                            bdl.iter_advanced_receiving(season=season, week=week, postseason=postseason),
-                            map_adv_receiving,
-                        ),
-                        batch_size,
-                    ):
-                        adv_receiving_upserted += supabase.upsert(
-                            "nfl_advanced_receiving_stats", chunk, on_conflict="player_id,season,week,postseason"
-                        )
-                    for chunk in _chunked(
-                        _iter_adv_rows(
-                            "rushing",
-                            bdl.iter_advanced_rushing(season=season, week=week, postseason=postseason),
-                            map_adv_rushing,
-                        ),
-                        batch_size,
-                    ):
-                        adv_rushing_upserted += supabase.upsert(
-                            "nfl_advanced_rushing_stats", chunk, on_conflict="player_id,season,week,postseason"
-                        )
-                    for chunk in _chunked(
-                        _iter_adv_rows(
-                            "passing",
-                            bdl.iter_advanced_passing(season=season, week=week, postseason=postseason),
-                            map_adv_passing,
-                        ),
-                        batch_size,
-                    ):
-                        adv_passing_upserted += supabase.upsert(
-                            "nfl_advanced_passing_stats", chunk, on_conflict="player_id,season,week,postseason"
-                        )
+            for chunk in _chunked((map_adv_receiving(s) for s in bdl.iter_advanced_receiving(season=season, week=0, postseason=False)), batch_size):
+                adv_receiving_upserted += supabase.upsert("nfl_advanced_receiving_stats", chunk, on_conflict="player_id,season,week,postseason")
+            for chunk in _chunked((map_adv_rushing(s) for s in bdl.iter_advanced_rushing(season=season, week=0, postseason=False)), batch_size):
+                adv_rushing_upserted += supabase.upsert("nfl_advanced_rushing_stats", chunk, on_conflict="player_id,season,week,postseason")
+            for chunk in _chunked((map_adv_passing(s) for s in bdl.iter_advanced_passing(season=season, week=0, postseason=False)), batch_size):
+                adv_passing_upserted += supabase.upsert("nfl_advanced_passing_stats", chunk, on_conflict="player_id,season,week,postseason")
     logger.info(
         "Upserted advanced stats: receiving=%d rushing=%d passing=%d",
         adv_receiving_upserted,

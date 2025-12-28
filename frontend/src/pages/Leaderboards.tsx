@@ -7,7 +7,6 @@ import { TeamLogo } from "@/components/TeamLogo";
 import { useNavigate } from "react-router-dom";
 import { formatStat } from "@/lib/utils";
 import {
-  ADVANCED_STAT_TOOLTIPS,
   ADVANCED_RECEIVING_COLUMNS,
   ADVANCED_RUSHING_COLUMNS,
   ADVANCED_PASSING_COLUMNS,
@@ -64,18 +63,14 @@ export default function Leaderboards() {
   const endpoint = useMemo(() => {
     const base = new URLSearchParams();
     base.set("season", String(season));
-    if (team) base.set("team", team);
-    if (position && position !== "ALL") base.set("position", position);
+    // Fetch broadly and filter client-side to avoid backend filter inconsistencies.
     // We do client-side search on `rows`, so requesting too few rows makes many valid players
     // impossible to find. Backend caps responses to 200 rows, so we request up to that cap.
-    base.set("limit", mode === "season" ? "200" : "100");
+    base.set("limit", mode === "season" ? "800" : "200");
     if (mode === "weekly") base.set("week", String(week));
 
     // If the user is searching, pass it to the backend so we can find players that aren't in the
     // current top-N slice. Keep this conservative to avoid hammering the API on single-char input.
-    const needle = search.trim();
-    if (needle.length >= 2) base.set("q", needle);
-
     // Advanced stats mode (season only)
     if (statsMode === "advanced" && mode === "season") {
       if (category === "receiving") {
@@ -158,7 +153,19 @@ export default function Leaderboards() {
     const q = search.trim().toLowerCase();
     let out = rows;
     if (q) {
-      out = out.filter((r) => String(r.player_name || "").toLowerCase().includes(q));
+      out = out.filter((r) => {
+        const name = String(r.player_name || "").toLowerCase();
+        const teamMatch = String(r.team || "").toLowerCase();
+        return name.includes(q) || teamMatch.includes(q);
+      });
+    }
+    if (team) {
+      const t = team.toUpperCase();
+      out = out.filter((r) => String(r.team || "").toUpperCase() === t);
+    }
+    if (position && position !== "ALL") {
+      const p = position.toUpperCase();
+      out = out.filter((r) => String(r.position || "").toUpperCase() === p);
     }
     const getVal = (r: Row, k: string): any => {
       if (k === "rank") return 0;
@@ -176,7 +183,21 @@ export default function Leaderboards() {
       return asc ? as.localeCompare(bs) : bs.localeCompare(as);
     });
     return sorted;
-  }, [rows, search, sortKey, asc]);
+  }, [rows, search, sortKey, asc, team, position]);
+
+  useEffect(() => {
+    if (statsMode === "advanced") {
+      if (category === "receiving") setSortKey("yards");
+      else if (category === "rushing") setSortKey("rush_yards");
+      else if (category === "passing") setSortKey("pass_yards");
+    } else {
+      if (category === "receiving") setSortKey("rec_yards");
+      else if (category === "rushing") setSortKey("rush_yards");
+      else if (category === "passing") setSortKey("passing_yards");
+      else if (category === "total_yards") setSortKey("total_yards");
+    }
+    setAsc(false);
+  }, [category, statsMode]);
 
   const skeletonColumns = useMemo(() => {
     if (category === "receiving") return 6; // Player, Team, TGT, REC, YDS, TD
@@ -245,17 +266,33 @@ export default function Leaderboards() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 w-full md:w-auto">
-              <AnimatedSelect
-                label="Mode"
-                options={["Weekly", "Season"]}
-                value={mode === "weekly" ? "Weekly" : "Season"}
-                onChange={(v) => {
-                  const newMode = v === "Weekly" ? "weekly" : "season";
-                  setMode(newMode);
-                  // Reset to standard mode when switching to weekly (advanced only works for season)
-                  if (newMode === "weekly") setStatsMode("standard");
-                }}
-              />
+              <div className="col-span-full sm:col-span-2 flex items-center gap-1 p-1 bg-secondary/30 rounded-lg border border-border">
+                {(["Weekly", "Season"] as const).map((m) => {
+                  const modeValue: Mode = m.toLowerCase() as Mode;
+                  const isActive = mode === modeValue;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        const newMode = modeValue;
+                        setMode(newMode);
+                        if (newMode === "weekly") setStatsMode("standard");
+                      }}
+                      className={`
+                        flex-1 px-2.5 py-1 text-xs font-medium rounded-md transition-all
+                        ${isActive 
+                          ? "bg-primary text-primary-foreground shadow-sm" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                        }
+                      `}
+                      aria-label={`Set mode to ${m}`}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
 
               {/* Standard / Advanced Toggle (Season only) */}
               {mode === "season" && category !== "total_yards" && (
@@ -294,7 +331,7 @@ export default function Leaderboards() {
                       type="button"
                       onClick={() => setCategory(catValue)}
                       className={`
-                        flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all
+                        flex-1 px-2.5 py-1 text-xs font-medium rounded-md transition-all
                         ${isActive 
                           ? "bg-primary text-primary-foreground shadow-sm" 
                           : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
@@ -321,9 +358,7 @@ export default function Leaderboards() {
                   value={`Week ${week}`}
                   onChange={(v) => setWeek(Number(v.replace("Week ", "")))}
                 />
-              ) : (
-                <div className="hidden lg:block" />
-              )}
+              ) : null}
 
               <AnimatedSelect
                 label="Team"
@@ -364,7 +399,7 @@ export default function Leaderboards() {
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
                   <TableHead className="text-muted-foreground font-medium">Player</TableHead>
-                  <TableHead className="text-muted-foreground font-medium">Team</TableHead>
+                  <SortHead k="team" label="Team" className="text-muted-foreground font-medium" />
                   {statsMode === "advanced" ? (
                     <>
                       {category === "receiving" && ADVANCED_RECEIVING_COLUMNS.map(col => (
@@ -444,7 +479,7 @@ export default function Leaderboards() {
                       return (
                         <TableRow
                           key={stableKey}
-                          className="data-row border-border cursor-pointer hover:bg-muted/50 transition-colors"
+                          className="data-row border-border cursor-pointer relative transition-all duration-200 ease-out hover:scale-[1.01] hover:bg-muted/70 hover:shadow-sm hover:z-10"
                           onClick={() => {
                             if (!pid) return;
                             const qs = new URLSearchParams({ season: String(season), player_id: pid });
@@ -486,7 +521,7 @@ export default function Leaderboards() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
+                        <TableCell className="text-sm">
                           <div className="flex items-center gap-1.5">
                             <TeamLogo team={r.team} size="sm" />
                             <span>{r.team || "FA"}</span>
@@ -496,17 +531,17 @@ export default function Leaderboards() {
                         {statsMode === "advanced" ? (
                           <>
                             {category === "receiving" && ADVANCED_RECEIVING_COLUMNS.map(col => (
-                              <TableCell key={col.k} className="text-center font-mono">
+                              <TableCell key={col.k} className="text-center">
                                 {formatStat(r[col.k] ?? 0, { integer: col.type === "int" })}
                               </TableCell>
                             ))}
                             {category === "rushing" && ADVANCED_RUSHING_COLUMNS.map(col => (
-                              <TableCell key={col.k} className="text-center font-mono">
+                              <TableCell key={col.k} className="text-center">
                                 {formatStat(r[col.k] ?? 0, { integer: col.type === "int" })}
                               </TableCell>
                             ))}
                             {category === "passing" && ADVANCED_PASSING_COLUMNS.map(col => (
-                              <TableCell key={col.k} className="text-center font-mono">
+                              <TableCell key={col.k} className="text-center">
                                 {formatStat(r[col.k] ?? 0, { integer: col.type === "int" })}
                               </TableCell>
                             ))}
@@ -515,43 +550,43 @@ export default function Leaderboards() {
                           <>
                             {category === "receiving" ? (
                               <>
-                                <TableCell className="text-center font-mono">{r.targets ?? 0}</TableCell>
-                                <TableCell className="text-center font-mono">{r.receptions ?? 0}</TableCell>
-                                <TableCell className="text-center font-mono font-semibold">{r.rec_yards ?? 0}</TableCell>
-                                <TableCell className="text-center font-mono">{r.rec_tds ?? 0}</TableCell>
+                                <TableCell className="text-center">{r.targets ?? 0}</TableCell>
+                                <TableCell className="text-center">{r.receptions ?? 0}</TableCell>
+                                <TableCell className="text-center font-semibold">{r.rec_yards ?? 0}</TableCell>
+                                <TableCell className="text-center">{r.rec_tds ?? 0}</TableCell>
                               </>
                             ) : category === "rushing" ? (
                           <>
-                            <TableCell className="text-center font-mono">{r.rush_attempts ?? 0}</TableCell>
-                            <TableCell className="text-center font-mono font-semibold">{r.rush_yards ?? 0}</TableCell>
-                            <TableCell className="text-center font-mono">{formatStat(r.ypc ?? 0)}</TableCell>
+                            <TableCell className="text-center">{r.rush_attempts ?? 0}</TableCell>
+                            <TableCell className="text-center font-semibold">{r.rush_yards ?? 0}</TableCell>
+                            <TableCell className="text-center">{formatStat(r.ypc ?? 0)}</TableCell>
                             {mode === "weekly" ? null : (
-                              <TableCell className="text-center font-mono">{formatStat(r.ypg ?? 0)}</TableCell>
+                              <TableCell className="text-center">{formatStat(r.ypg ?? 0)}</TableCell>
                             )}
-                            <TableCell className="text-center font-mono">{r.receptions ?? 0}</TableCell>
+                            <TableCell className="text-center">{r.receptions ?? 0}</TableCell>
                             {mode === "weekly" ? null : (
-                              <TableCell className="text-center font-mono">{formatStat(r.rpg ?? 0)}</TableCell>
+                              <TableCell className="text-center">{formatStat(r.rpg ?? 0)}</TableCell>
                             )}
-                            <TableCell className="text-center font-mono">{r.rec_yards ?? 0}</TableCell>
+                            <TableCell className="text-center">{r.rec_yards ?? 0}</TableCell>
                             {mode === "weekly" ? null : (
-                              <TableCell className="text-center font-mono">{formatStat(r.rec_ypg ?? 0)}</TableCell>
+                              <TableCell className="text-center">{formatStat(r.rec_ypg ?? 0)}</TableCell>
                             )}
-                            <TableCell className="text-center font-mono">{r.rush_tds ?? 0}</TableCell>
+                            <TableCell className="text-center">{r.rush_tds ?? 0}</TableCell>
                           </>
                         ) : category === "passing" ? (
                           <>
-                            <TableCell className="text-center font-mono">{r.passing_completions ?? 0}</TableCell>
-                            <TableCell className="text-center font-mono">{r.passing_attempts ?? 0}</TableCell>
-                            <TableCell className="text-center font-mono font-semibold">{r.passing_yards ?? 0}</TableCell>
-                            <TableCell className="text-center font-mono">{r.passing_tds ?? 0}</TableCell>
-                            <TableCell className="text-center font-mono">{r.interceptions ?? 0}</TableCell>
+                            <TableCell className="text-center">{r.passing_completions ?? 0}</TableCell>
+                            <TableCell className="text-center">{r.passing_attempts ?? 0}</TableCell>
+                            <TableCell className="text-center font-semibold">{r.passing_yards ?? 0}</TableCell>
+                            <TableCell className="text-center">{r.passing_tds ?? 0}</TableCell>
+                            <TableCell className="text-center">{r.interceptions ?? 0}</TableCell>
                           </>
                             ) : (
                               <>
-                                <TableCell className="text-center font-mono">{r.rush_yards ?? 0}</TableCell>
-                                <TableCell className="text-center font-mono">{r.rec_yards ?? 0}</TableCell>
-                                <TableCell className="text-center font-mono font-semibold">{r.total_yards ?? 0}</TableCell>
-                                <TableCell className="text-center font-mono">{r.total_tds ?? 0}</TableCell>
+                                <TableCell className="text-center">{r.rush_yards ?? 0}</TableCell>
+                                <TableCell className="text-center">{r.rec_yards ?? 0}</TableCell>
+                                <TableCell className="text-center font-semibold">{r.total_yards ?? 0}</TableCell>
+                                <TableCell className="text-center">{r.total_tds ?? 0}</TableCell>
                               </>
                             )}
                           </>

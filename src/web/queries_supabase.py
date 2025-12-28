@@ -881,7 +881,7 @@ def receiving_season(
             }
         )
     out.sort(key=lambda x: int(x.get("targets") or 0), reverse=True)
-    return out[: min(max(limit, 1), 200)]
+    return out[: min(max(limit, 1), 800)]
 
 
 def rushing_season(
@@ -935,7 +935,7 @@ def rushing_season(
             }
         )
     out.sort(key=lambda x: int(x.get("rush_yards") or 0), reverse=True)
-    return out[: min(max(limit, 1), 200)]
+    return out[: min(max(limit, 1), 800)]
 
 
 def passing_dashboard(
@@ -1019,7 +1019,7 @@ def passing_dashboard(
     # FORCE SORT by passing yards descending to fix ordering issues
     out.sort(key=lambda x: (x.get('passing_yards') or 0), reverse=True)
     
-    return out[: min(max(limit, 1), 200)]
+    return out[: min(max(limit, 1), 800)]
 
 
 def passing_season(
@@ -1109,7 +1109,7 @@ def passing_season(
         )
 
     out.sort(key=lambda x: int(x.get("passing_yards") or 0), reverse=True)
-    return out[: min(max(limit, 1), 200)]
+    return out[: min(max(limit, 1), 800)]
 
 
 def total_yards_dashboard(
@@ -1190,7 +1190,7 @@ def total_yards_dashboard(
             }
         )
     out.sort(key=lambda x: int(x.get("total_yards") or 0), reverse=True)
-    return out[: min(max(limit, 1), 200)]
+    return out[: min(max(limit, 1), 800)]
 
 
 def total_yards_season(
@@ -1242,7 +1242,7 @@ def total_yards_season(
             }
         )
     out.sort(key=lambda x: int(x.get("total_yards") or 0), reverse=True)
-    return out[: min(max(limit, 1), 200)]
+    return out[: min(max(limit, 1), 800)]
 
 
 def advanced_passing_leaderboard(
@@ -1526,5 +1526,389 @@ def advanced_receiving_leaderboard(
         })
     
     return out
+
+
+def _generate_matchup_flags(row: dict[str, Any], position: str) -> list[str]:
+    """
+    Generate top matchup flags explaining why this is a smash spot (no emojis, personalized).
+    """
+    flags = []
+    
+    # Helper to safely get numeric values
+    def get_num(key: str) -> float:
+        return row.get(key) or 0
+    
+    def percentile_to_rank(percentile: float) -> int:
+        """Convert percentile (0-100) to rank (1-32). Higher percentile = worse defense = higher rank number."""
+        return max(1, min(32, round(1 + (percentile / 100) * 31)))
+    
+    if position == "WR":
+        # Air yards share - personalized messaging
+        air_share = get_num("air_share_pct")
+        if air_share >= 40.0:
+            flags.append(f"Commands {air_share:.0f}% of team's deep targets")
+        elif air_share >= 35.0:
+            flags.append(f"Primary receiving option with {air_share:.0f}% air share")
+        elif air_share >= 30.0:
+            flags.append(f"Top target with {air_share:.0f}% of team's air yards")
+        
+        # Separation
+        separation = get_num("separation")
+        if separation >= 3.5:
+            flags.append(f"Consistently creates {separation:.1f} yards of separation")
+        elif separation >= 3.0:
+            flags.append(f"Gets open with {separation:.1f}yd average cushion")
+        
+        # Opponent defense ranking - convert to 1-32 rank
+        opp_rank_pct = get_num("opp_def_rank_pct")
+        opp_rank = percentile_to_rank(opp_rank_pct)
+        opp_ypg = get_num("opp_pass_ypg")
+        if opp_rank >= 28:  # Bottom 5
+            flags.append(f"Facing #{opp_rank} ranked pass defense (allows {opp_ypg:.0f} YPG)")
+        elif opp_rank >= 23:  # Bottom 10
+            flags.append(f"Favorable matchup vs #{opp_rank} ranked secondary")
+        
+        # QB quality
+        qb_cpoe = get_num("qb_cpoe")
+        if qb_cpoe >= 3.0:
+            flags.append(f"Elite QB play (+{qb_cpoe:.1f} completion % over expected)")
+        elif qb_cpoe >= 2.0:
+            flags.append(f"Efficient QB with +{qb_cpoe:.1f} CPOE above average")
+        
+        # Game script
+        game_total = get_num("game_total")
+        is_underdog = get_num("is_underdog")
+        if game_total >= 48.0 and is_underdog == 1:
+            flags.append(f"High-scoring environment ({game_total:.0f} O/U) + trailing script")
+        elif game_total >= 50.0:
+            flags.append(f"Shootout potential with {game_total:.0f} point total")
+        elif game_total >= 48.0:
+            flags.append(f"High over/under of {game_total:.0f} points expected")
+    
+    elif position == "RB":
+        # Run funnel matchup - convert to 1-32 rank
+        opp_rank_pct = get_num("opp_def_rank_pct")
+        opp_rank = percentile_to_rank(opp_rank_pct)
+        opp_rush_ypg = get_num("opp_rush_ypg")
+        if opp_rank >= 28:  # Bottom 5
+            flags.append(f"Facing #{opp_rank} ranked run defense (allows {opp_rush_ypg:.0f} YPG)")
+        elif opp_rank >= 23:  # Bottom 10
+            flags.append(f"Favorable run matchup vs #{opp_rank} ranked defense")
+        
+        # Turnover differential
+        turnover_diff = get_num("opp_turnover_diff")
+        if turnover_diff <= -5:
+            flags.append(f"Opponent giveaway-prone with {abs(int(turnover_diff))} turnover differential")
+        elif turnover_diff <= -3:
+            flags.append(f"Short field opportunities with turnover-prone opponent")
+        
+        # Favorite status (game script)
+        is_favorite = get_num("is_favorite")
+        spread = get_num("spread")
+        if is_favorite == 1 and spread <= -7.0:
+            flags.append(f"Heavy {abs(spread):.1f}-pt favorite (run-heavy 4th quarter)")
+        elif is_favorite == 1 and spread <= -3.5:
+            flags.append(f"Favored by {abs(spread):.1f} points (positive game script)")
+        
+        # Efficiency
+        ryoe = get_num("ryoe_per_att")
+        if ryoe >= 0.20:
+            flags.append(f"Elite efficiency at +{ryoe:.2f} rush yards over expected per carry")
+        elif ryoe >= 0.15:
+            flags.append(f"Creating extra yardage at +{ryoe:.2f} RYOE per attempt")
+        
+        # Volume
+        touches = get_num("touches_per_game")
+        if touches >= 22.0:
+            flags.append(f"True workhorse with {touches:.1f} touches per game")
+        elif touches >= 20.0:
+            flags.append(f"High-volume back averaging {touches:.1f} touches/game")
+        
+        # Dual threat receiving upside
+        rec_targets = get_num("rec_targets")
+        if rec_targets >= 60:
+            flags.append(f"Dual-threat back with {int(rec_targets)} targets on the season")
+        elif rec_targets >= 40:
+            flags.append(f"Pass-catching upside with {int(rec_targets)} receiving targets")
+    
+    elif position == "QB":
+        # Shootout potential
+        game_total = get_num("game_total")
+        if game_total >= 52.0:
+            flags.append(f"Massive shootout potential with {game_total:.0f} O/U")
+        elif game_total >= 50.0:
+            flags.append(f"High-scoring game expected ({game_total:.0f} O/U)")
+        elif game_total >= 48.0:
+            flags.append(f"Elevated passing environment with {game_total:.0f} point total")
+        
+        # Pass funnel defense - convert to 1-32 rank
+        opp_rank_pct = get_num("opp_def_rank_pct")
+        opp_rank = percentile_to_rank(opp_rank_pct)
+        opp_pass_ypg = get_num("opp_pass_ypg")
+        if opp_rank >= 28:  # Bottom 5
+            flags.append(f"Facing #{opp_rank} ranked pass defense (allows {opp_pass_ypg:.0f} YPG)")
+        elif opp_rank >= 23:  # Bottom 10
+            flags.append(f"Soft secondary ranked #{opp_rank} in pass yards allowed")
+        
+        # Pocket protection
+        oline_rank = get_num("oline_rank_pct")
+        if oline_rank >= 75:
+            flags.append(f"Elite pass protection from top-{int(100 - oline_rank)} offensive line")
+        elif oline_rank >= 70:
+            flags.append(f"Clean pocket with strong O-line protection")
+        
+        # QB efficiency
+        cpoe = get_num("cpoe")
+        if cpoe >= 3.0:
+            flags.append(f"Elite accuracy at +{cpoe:.1f} completion % above expectation")
+        elif cpoe >= 2.5:
+            flags.append(f"Highly efficient with +{cpoe:.1f} CPOE")
+        
+        # Underdog game script
+        is_underdog = get_num("is_underdog")
+        spread = get_num("spread")
+        if is_underdog == 1 and spread >= 7.0:
+            flags.append(f"Underdog by {spread:.1f} points (pass-heavy trailing script)")
+        elif is_underdog == 1 and spread >= 3.5:
+            flags.append(f"Expected to trail ({spread:.1f}-pt underdog)")
+    
+    # Return top 3-4 flags
+    # Ensure minimum of 3 flags with fallbacks
+    if len(flags) < 3:
+        if position == "WR":
+            if get_num("targets_per_game") > 0 and len(flags) < 3:
+                flags.append(f"Averages {get_num('targets_per_game'):.1f} targets per game")
+            if get_num("catch_rate") > 0 and len(flags) < 3:
+                flags.append(f"Reliable hands with {get_num('catch_rate'):.0f}% catch rate")
+            if get_num("adot") > 0 and len(flags) < 3:
+                flags.append(f"Average depth of target: {get_num('adot'):.1f} yards downfield")
+        elif position == "RB":
+            if get_num("rush_att_per_game") > 0 and len(flags) < 3:
+                flags.append(f"Sees {get_num('rush_att_per_game'):.1f} carries per game")
+            if get_num("ypc") > 0 and len(flags) < 3:
+                flags.append(f"Averages {get_num('ypc'):.1f} yards per carry")
+            if get_num("touches_per_game") > 0 and len(flags) < 3:
+                flags.append(f"Total touches: {get_num('touches_per_game'):.1f} per game")
+        elif position == "QB":
+            if get_num("pass_att_per_game") > 0 and len(flags) < 3:
+                flags.append(f"Throws {get_num('pass_att_per_game'):.1f} passes per game")
+            if get_num("qb_rating") > 0 and len(flags) < 3:
+                flags.append(f"QB rating of {get_num('qb_rating'):.1f} this season")
+            if get_num("cpoe") != 0 and len(flags) < 3:
+                flags.append(f"Completion percentage: {get_num('comp_pct'):.1f}%")
+    
+    return flags[:4]
+
+
+def _get_dynamic_stats(row: dict[str, Any], position: str) -> tuple[str, str, str]:
+    """
+    Get top 3 most relevant/impactful stats for a player based on their scoring components.
+    Returns (stat1, stat2, stat3) formatted strings.
+    """
+    def safe_get(key: str, default: float = 0.0) -> float:
+        """Safely get numeric value, ensuring it's not None."""
+        val = row.get(key, default)
+        return val if val is not None else default
+    
+    def percentile_to_rank(percentile: float) -> int:
+        """Convert percentile (0-100) to rank (1-32). Higher percentile = worse defense = higher rank number."""
+        return max(1, min(32, round(1 + (percentile / 100) * 31)))
+    
+    if position == "WR" or position == "TE":
+        # Gather stats with their scoring component weights
+        opp_rank = percentile_to_rank(safe_get('opp_def_rank_pct', 50))
+        stats = [
+            (safe_get('air_share_score'), f"{safe_get('air_share_pct'):.0f}% Air", "air"),
+            (safe_get('adot_score'), f"{safe_get('adot'):.1f} aDOT", "adot"),
+            (safe_get('separation_score'), f"{safe_get('separation'):.1f}yd Sep", "sep"),
+            (safe_get('matchup_score'), f"#{opp_rank} Def", "matchup"),
+            (safe_get('qb_efficiency_score'), f"+{safe_get('qb_cpoe'):.1f} QB CPOE", "qb"),
+            (safe_get('catch_rate_score'), f"{safe_get('catch_rate'):.0f}% Catch", "catch"),
+            (safe_get('volume_score'), f"{safe_get('targets_per_game'):.1f} TGT/G", "vol"),
+        ]
+        # Sort by score contribution and take top 3
+        top_3 = sorted(stats, key=lambda x: x[0], reverse=True)[:3]
+        return (top_3[0][1], top_3[1][1], top_3[2][1])
+    
+    elif position == "RB" or position == "HB":
+        opp_rank = percentile_to_rank(safe_get('opp_def_rank_pct', 50))
+        stats = [
+            (safe_get('efficiency_score'), f"+{safe_get('ryoe_per_att'):.2f} RYOE", "eff"),
+            (safe_get('volume_score'), f"{safe_get('rush_att_per_game'):.1f} ATT/G", "vol"),
+            (safe_get('run_funnel_score'), f"#{opp_rank} Run D", "matchup"),
+            (safe_get('favorite_score'), f"{abs(safe_get('spread')):.1f}pt Fav" if safe_get('is_favorite') == 1 else "Script", "script"),
+            (safe_get('receiving_upside_score'), f"{int(safe_get('rec_targets'))} Rec TGT", "rec"),
+            (safe_get('receiving_upside_score') + 1, f"{safe_get('touches_per_game'):.1f} Touch/G", "touch"),
+        ]
+        top_3 = sorted(stats, key=lambda x: x[0], reverse=True)[:3]
+        return (top_3[0][1], top_3[1][1], top_3[2][1])
+    
+    elif position == "QB":
+        opp_rank = percentile_to_rank(safe_get('opp_def_rank_pct', 50))
+        stats = [
+            (safe_get('shootout_score'), f"{safe_get('game_total'):.0f} O/U", "shootout"),
+            (safe_get('efficiency_score'), f"+{safe_get('cpoe'):.1f} CPOE", "eff"),
+            (safe_get('aggressiveness_score'), f"{safe_get('aggressiveness'):.1f}% AGG", "agg"),
+            (safe_get('pass_funnel_score'), f"#{opp_rank} Pass D", "matchup"),
+            (safe_get('pocket_score'), f"#{int(100-safe_get('oline_rank_pct', 50))} OLine", "oline"),
+            (safe_get('script_score'), f"{abs(safe_get('spread')):.1f}pt Dog" if safe_get('is_underdog') == 1 else "Script", "script"),
+            (1, f"{safe_get('pass_att_per_game'):.1f} ATT/G", "vol"),
+        ]
+        top_3 = sorted(stats, key=lambda x: x[0], reverse=True)[:3]
+        return (top_3[0][1], top_3[1][1], top_3[2][1])
+    
+    # Fallback
+    return ("N/A", "N/A", "N/A")
+
+
+def smash_feed(
+    sb: SupabaseClient, 
+    season: int, 
+    week: int, 
+    limit: int = 10
+) -> list[dict[str, Any]]:
+    """
+    Unified Smash Spot Feed: Returns top betting opportunities across all positions.
+    
+    Queries:
+    - model_wr_smash (WR/TE alpha receivers) - Top 15
+    - model_rb_smash (RB dual-threat backs) - Top 15
+    - model_qb_smash (QB gunslingers) - Top 15
+    
+    Returns:
+    - Top 10 (or limit) players across all positions sorted by smash_score
+    - Top 3 matchup flags per player
+    - Player photo URLs
+    - Vegas lines (DraftKings)
+    """
+    
+    # Query top 15 per position (total pool of 45 players)
+    wr_rows = sb.select(
+        "model_wr_smash",
+        select="*",
+        filters={"season": f"eq.{int(season)}", "week": f"eq.{int(week)}"},
+        limit=15,
+    )
+    
+    rb_rows = sb.select(
+        "model_rb_smash",
+        select="*",
+        filters={"season": f"eq.{int(season)}", "week": f"eq.{int(week)}"},
+        limit=15,
+    )
+    
+    qb_rows = sb.select(
+        "model_qb_smash",
+        select="*",
+        filters={"season": f"eq.{int(season)}", "week": f"eq.{int(week)}"},
+        limit=15,
+    )
+    
+    # Merge all results
+    all_spots: list[dict[str, Any]] = []
+    
+    for row in wr_rows:
+        player_name = row.get("player_name", "")
+        team = row.get("team", "")
+        stat1, stat2, stat3 = _get_dynamic_stats(row, "WR")
+        
+        # Convert percentile to 1-32 rank for display
+        opp_def_pct = float(row.get("opp_def_rank_pct") or 50)
+        opp_rank_1_32 = max(1, min(32, round(1 + (opp_def_pct / 100) * 31)))
+        
+        all_spots.append({
+            "player_id": str(row.get("player_id", "")),
+            "player_name": player_name,
+            "position": row.get("position", "WR"),
+            "team": team,
+            "opponent": row.get("opponent", ""),
+            "smash_score": float(row.get("smash_score") or 0),
+            "dk_line": float(row.get("dk_line") or 0) if row.get("dk_line") else None,
+            "game_total": float(row.get("game_total") or 0),
+            "opponent_rank": opp_rank_1_32,
+            "matchup_flags": _generate_matchup_flags(row, "WR"),
+            "photoUrl": player_photo_url_from_name_team(name=player_name, team=team),
+            # Dynamic stats based on scoring components
+            "stat1": stat1,
+            "stat2": stat2,
+            "stat3": stat3,
+            # ALL raw database fields for expanded view
+            "raw_stats": {k: v for k, v in row.items() if k not in ["player_name", "team", "opponent", "position"]},
+        })
+    
+    for row in rb_rows:
+        player_name = row.get("player_name", "")
+        team = row.get("team", "")
+        stat1, stat2, stat3 = _get_dynamic_stats(row, "RB")
+        
+        # Convert percentile to 1-32 rank for display
+        opp_def_pct = float(row.get("opp_def_rank_pct") or 50)
+        opp_rank_1_32 = max(1, min(32, round(1 + (opp_def_pct / 100) * 31)))
+        
+        all_spots.append({
+            "player_id": str(row.get("player_id", "")),
+            "player_name": player_name,
+            "position": row.get("position", "RB"),
+            "team": team,
+            "opponent": row.get("opponent", ""),
+            "smash_score": float(row.get("smash_score") or 0),
+            "dk_line": float(row.get("dk_line") or 0) if row.get("dk_line") else None,
+            "game_total": float(row.get("game_total") or 0),
+            "opponent_rank": opp_rank_1_32,
+            "matchup_flags": _generate_matchup_flags(row, "RB"),
+            "photoUrl": player_photo_url_from_name_team(name=player_name, team=team),
+            # Dynamic stats based on scoring components
+            "stat1": stat1,
+            "stat2": stat2,
+            "stat3": stat3,
+            # ALL raw database fields for expanded view
+            "raw_stats": {k: v for k, v in row.items() if k not in ["player_name", "team", "opponent", "position"]},
+        })
+    
+    for row in qb_rows:
+        player_name = row.get("player_name", "")
+        team = row.get("team", "")
+        stat1, stat2, stat3 = _get_dynamic_stats(row, "QB")
+        
+        # Convert percentile to 1-32 rank for display
+        opp_def_pct = float(row.get("opp_def_rank_pct") or 50)
+        opp_rank_1_32 = max(1, min(32, round(1 + (opp_def_pct / 100) * 31)))
+        
+        all_spots.append({
+            "player_id": str(row.get("player_id", "")),
+            "player_name": player_name,
+            "position": row.get("position", "QB"),
+            "team": team,
+            "opponent": row.get("opponent", ""),
+            "smash_score": float(row.get("smash_score") or 0),
+            "dk_line": float(row.get("dk_line") or 0) if row.get("dk_line") else None,
+            "game_total": float(row.get("game_total") or 0),
+            "opponent_rank": opp_rank_1_32,
+            "matchup_flags": _generate_matchup_flags(row, "QB"),
+            "photoUrl": player_photo_url_from_name_team(name=player_name, team=team),
+            # Dynamic stats based on scoring components
+            "stat1": stat1,
+            "stat2": stat2,
+            "stat3": stat3,
+            # ALL raw database fields for expanded view
+            "raw_stats": {k: v for k, v in row.items() if k not in ["player_name", "team", "opponent", "position"]},
+        })
+    
+    # Apply position-specific curve scaling: each position's max score becomes 100
+    # This ensures QBs, RBs, and WRs/TEs are all competitive
+    for position in ['QB', 'RB', 'WR', 'TE']:
+        pos_spots = [spot for spot in all_spots if spot['position'] == position]
+        if pos_spots:
+            max_score = max(spot['smash_score'] for spot in pos_spots)
+            if max_score > 0 and max_score < 100:
+                scale_factor = 100.0 / max_score
+                for spot in pos_spots:
+                    spot['smash_score'] = round(spot['smash_score'] * scale_factor)
+    
+    # Sort by smash_score descending
+    all_spots.sort(key=lambda x: x["smash_score"], reverse=True)
+    
+    # Return top N
+    return all_spots[:min(limit, len(all_spots))]
 
 

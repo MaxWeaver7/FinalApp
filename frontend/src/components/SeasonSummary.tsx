@@ -125,12 +125,14 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             trend={getStatTrend('passing yards', stats.passingYards || 0)}
             delay={150}
             sparkline={<StatSparkline data={last5Games.passing.data} average={last5Games.passing.avg} />}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Pass TDs" 
             value={<CountUp end={stats.passingTouchdowns || 0} />} 
             trend={getStatTrend('touchdown', stats.passingTouchdowns || 0)}
             delay={200}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Rush Yards" 
@@ -139,17 +141,20 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             trend={getStatTrend('rushingYards', stats.rushingYards || 0)}
             delay={250}
             sparkline={<StatSparkline data={last5Games.rushing.data} average={last5Games.rushing.avg} />}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Rush TDs" 
             value={<CountUp end={stats.rushingTouchdowns || 0} />} 
             trend={getStatTrend('touchdown', stats.rushingTouchdowns || 0)}
             delay={300}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="INT" 
             value={<CountUp end={stats.passingInterceptions || 0} />} 
             delay={350}
+            teamColors={{ primary, secondary }}
           />
         </div>
       ) : isReceiver ? (
@@ -159,6 +164,7 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             value={<CountUp end={stats.receptions || 0} />} 
             subValue={`${stats.games || 0} games`}
             delay={150}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Rec Yards" 
@@ -167,18 +173,21 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             trend={getStatTrend('receivingYards', stats.receivingYards || 0)}
             delay={200}
             sparkline={<StatSparkline data={last5Games.receiving.data} average={last5Games.receiving.avg} />}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Targets" 
             value={<CountUp end={stats.targets || 0} />} 
             subValue={`${formatStat((stats.targets || 0) / (stats.games || 1))} per game`}
             delay={250}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Rec TDs" 
             value={<CountUp end={stats.receivingTouchdowns || 0} />} 
             trend={getStatTrend('touchdown', stats.receivingTouchdowns || 0)}
             delay={300}
+            teamColors={{ primary, secondary }}
           />
         </div>
       ) : (
@@ -188,6 +197,7 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             value={<CountUp end={stats.rushAttempts || 0} />} 
             subValue={`${stats.games || 0} games`}
             delay={150}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Rush Yards" 
@@ -196,12 +206,14 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             trend={getStatTrend('rushingYards', stats.rushingYards || 0)}
             delay={200}
             sparkline={<StatSparkline data={last5Games.rushing.data} average={last5Games.rushing.avg} />}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Rush TDs" 
             value={<CountUp end={stats.rushingTouchdowns || 0} />} 
             trend={getStatTrend('touchdown', stats.rushingTouchdowns || 0)}
             delay={250}
+            teamColors={{ primary, secondary }}
           />
           <StatCard 
             label="Receptions" 
@@ -209,6 +221,7 @@ export function SeasonSummary({ player }: SeasonSummaryProps) {
             subValue={`${stats.receivingYards || 0} rec yards`}
             delay={300}
             sparkline={isRB ? <StatSparkline data={last5Games.receiving.data} average={last5Games.receiving.avg} /> : undefined}
+            teamColors={{ primary, secondary }}
           />
         </div>
       )}

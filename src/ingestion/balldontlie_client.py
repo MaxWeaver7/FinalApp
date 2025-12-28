@@ -187,29 +187,16 @@ class BallDontLieNFLClient:
         yield from self.paginate("/season_stats", params=params)
 
     def iter_advanced_receiving(self, *, season: int, week: int = 0, postseason: bool = False) -> Iterator[dict[str, Any]]:
-        # Week=0 represents full-season totals and should be omitted per API docs.
-        # Postseason: when false, omit parameter (defaults to regular season); when true, send integer 1.
-        params: dict[str, Any] = {"season": int(season)}
-        if int(week) != 0:
-            params["week"] = int(week)
-        if postseason:
-            params["postseason"] = 1
+        # This endpoint expects postseason as 0/1 (not true/false).
+        params: dict[str, Any] = {"season": int(season), "week": int(week), "postseason": "1" if postseason else "0"}
         yield from self.paginate("/advanced_stats/receiving", params=params)
 
     def iter_advanced_rushing(self, *, season: int, week: int = 0, postseason: bool = False) -> Iterator[dict[str, Any]]:
-        params: dict[str, Any] = {"season": int(season)}
-        if int(week) != 0:
-            params["week"] = int(week)
-        if postseason:
-            params["postseason"] = 1
+        params: dict[str, Any] = {"season": int(season), "week": int(week), "postseason": "1" if postseason else "0"}
         yield from self.paginate("/advanced_stats/rushing", params=params)
 
     def iter_advanced_passing(self, *, season: int, week: int = 0, postseason: bool = False) -> Iterator[dict[str, Any]]:
-        params: dict[str, Any] = {"season": int(season)}
-        if int(week) != 0:
-            params["week"] = int(week)
-        if postseason:
-            params["postseason"] = 1
+        params: dict[str, Any] = {"season": int(season), "week": int(week), "postseason": "1" if postseason else "0"}
         yield from self.paginate("/advanced_stats/passing", params=params)
 
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +51,7 @@ export function AnimatedSelect({ label, options, value, onChange, className }: A
   const displayValue = value || label;
 
   // Framer Motion Variants - "Turbo Mode"
-  const containerVariants = {
+  const containerVariants: Variants = {
     open: {
       clipPath: "inset(0% 0% 0% 0% round 10px)",
       transition: {
@@ -72,7 +72,7 @@ export function AnimatedSelect({ label, options, value, onChange, className }: A
     },
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     open: {
       opacity: 1,
       y: 0,

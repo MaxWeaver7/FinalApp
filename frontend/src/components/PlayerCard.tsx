@@ -32,10 +32,14 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0, onCompare }
     <div
       onClick={onClick}
       className={cn(
-        "glass-card rounded-xl p-4 cursor-pointer relative transition-all duration-200 ease-out opacity-0 animate-slide-up group hover:scale-[1.02] hover:shadow-lg hover:bg-secondary/40 hover:z-10",
+        "glass-card rounded-xl p-4 cursor-pointer relative transition-all duration-200 ease-out opacity-0 animate-slide-up group hover:scale-[1.02] hover:shadow-lg hover:z-10 border-2",
         isSelected && "ring-2 ring-primary"
       )}
-      style={{ animationDelay: `${delay}ms` }}
+      style={{ 
+        animationDelay: `${delay}ms`,
+        background: `linear-gradient(135deg, ${primary}30, ${secondary}20)`,
+        borderColor: primary,
+      }}
     >
       <div className="flex items-center gap-4">
         <div className="relative">

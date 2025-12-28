@@ -49,7 +49,6 @@ export const ADVANCED_STAT_TOOLTIPS: Record<string, string> = {
   completion_percentage_above_expectation: "Completion % above expected based on throw difficulty",
   expected_completion_percentage: "Expected completion % based on throw characteristics",
   avg_time_to_throw: "Average time (seconds) from snap to throw",
-  avg_intended_air_yards: "Average distance ball traveled in air on pass attempts",
   avg_completed_air_yards: "Average air yards on completed passes",
   avg_air_distance: "Average distance ball traveled in air (all attempts)",
   avg_air_yards_differential: "Difference between intended and completed air yards",
