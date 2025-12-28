@@ -173,7 +173,9 @@ wr_matchups AS (
       ELSE 0.25
     END) * 10.0 AS game_script_score,
     (CASE WHEN wr.catch_percentage >= 70.0 THEN 1.0 WHEN wr.catch_percentage >= 65.0 THEN 0.80 WHEN wr.catch_percentage >= 60.0 THEN 0.55 WHEN wr.catch_percentage >= 55.0 THEN 0.30 ELSE 0.1 END) * 5.0 AS catch_rate_score,
-    (CASE WHEN wr.targets_per_game >= 10.0 THEN 1.0 WHEN wr.targets_per_game >= 8.0 THEN 0.80 WHEN wr.targets_per_game >= 6.0 THEN 0.55 WHEN wr.targets_per_game >= 4.0 THEN 0.30 ELSE 0.1 END) * 15.0 AS volume_score
+    (CASE WHEN wr.targets_per_game >= 10.0 THEN 1.0 WHEN wr.targets_per_game >= 8.0 THEN 0.80 WHEN wr.targets_per_game >= 6.0 THEN 0.55 WHEN wr.targets_per_game >= 4.0 THEN 0.30 ELSE 0.1 END)
+      * (CASE WHEN DENSE_RANK() OVER (PARTITION BY wr.team_id ORDER BY wr.targets_per_game DESC) = 1 THEN 1.0 WHEN DENSE_RANK() OVER (PARTITION BY wr.team_id ORDER BY wr.targets_per_game DESC) = 2 THEN 0.75 ELSE 0.50 END)
+      * 15.0 AS volume_score
 
   FROM wr_season_stats wr
   INNER JOIN upcoming_games ug ON wr.team_id IN (ug.home_team_id, ug.visitor_team_id)
