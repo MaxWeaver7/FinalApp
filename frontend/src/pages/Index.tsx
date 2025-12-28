@@ -3,11 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { PlayerCard } from "@/components/PlayerCard";
 import { SeasonSummary } from "@/components/SeasonSummary";
+import { ComparisonModal } from "@/components/comparison/ComparisonModal";
 import { PlayerDossierSkeleton } from "@/components/skeletons/PlayerDossierSkeleton";
 import { AdvancedStatsTable } from "@/components/AdvancedStatsTable";
 import { GoatAdvancedStats } from "@/components/GoatAdvancedStats";
 import { AnimatedSelect } from "@/components/common/AnimatedSelect";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFilterOptions, usePlayers } from "@/hooks/useApi";
 import { Player, PlayerGameLog } from "@/types/player";
 import { useSearchParams } from "react-router-dom";
@@ -25,6 +25,8 @@ const Index = () => {
   const [selectedPosition, setSelectedPosition] = useState<string>('');
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [compareTarget, setCompareTarget] = useState<Player | null>(null);
+  const [compareOpen, setCompareOpen] = useState<boolean>(false);
   const [includePostseason, setIncludePostseason] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
   const [debouncedSearch, setDebouncedSearch] = useState<string>("");
@@ -98,12 +100,18 @@ const Index = () => {
   }, [playersData?.players, offset]);
 
   const visiblePlayers = useMemo(() => {
-    // When we’re server-searching, the backend already narrowed the list; still apply local filter for niceness.
     const base = allPlayers;
     const q = search.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter((p) => p.player_name.toLowerCase().includes(q));
-  }, [allPlayers, search]);
+    const team = selectedTeam.trim().toUpperCase();
+    const pos = selectedPosition.trim().toUpperCase();
+
+    return base.filter((p) => {
+      if (team && String(p.team || "").toUpperCase() !== team) return false;
+      if (pos && String(p.position || "").toUpperCase() !== pos) return false;
+      if (q && !p.player_name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allPlayers, search, selectedTeam, selectedPosition]);
 
   // If coming from Leaderboards, honor ?season= and ?player_id=.
   useEffect(() => {
@@ -230,6 +238,10 @@ const Index = () => {
                   player={player}
                   isSelected={selectedPlayer?.player_id === player.player_id}
                   onClick={() => setSelectedPlayer(player)}
+                  onCompare={(p) => {
+                    setCompareTarget(p);
+                    setCompareOpen(true);
+                  }}
                   // Avoid huge perceived slowness from staggered animations on large lists.
                   delay={idx < 16 ? 60 + idx * 20 : 0}
                 />
@@ -292,6 +304,18 @@ const Index = () => {
           </div>
         </div>
       </main>
+
+      <ComparisonModal
+        isOpen={compareOpen}
+        onClose={() => {
+          setCompareOpen(false);
+          setCompareTarget(null);
+        }}
+        playerA={compareTarget}
+        players={allPlayers}
+        season={selectedSeason}
+        includePostseason={includePostseason}
+      />
 
       {/* Footer */}
       <footer className="border-t border-border mt-12 py-6">

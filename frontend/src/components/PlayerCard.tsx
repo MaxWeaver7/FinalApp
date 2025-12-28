@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Player } from "@/types/player";
 import { cn, formatStat } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import { ArrowLeftRight, ChevronRight } from "lucide-react";
 import { TeamLogo } from "./TeamLogo";
 import { getTeamColors } from "@/config/nfl-teams";
 
@@ -10,9 +10,10 @@ interface PlayerCardProps {
   isSelected?: boolean;
   onClick?: () => void;
   delay?: number;
+  onCompare?: (player: Player) => void;
 }
 
-export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCardProps) {
+export function PlayerCard({ player, isSelected, onClick, delay = 0, onCompare }: PlayerCardProps) {
   const isReceiver = ['WR', 'TE'].includes(player.position || '');
   const isQB = (player.position || '').toUpperCase() === 'QB';
   const seasonTotals = player.seasonTotals || player;
@@ -31,9 +32,8 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
     <div
       onClick={onClick}
       className={cn(
-        "glass-card rounded-xl p-4 cursor-pointer transition-all duration-300 opacity-0 animate-slide-up group",
-        isSelected && "ring-2 ring-primary glow-primary",
-        !isSelected && "hover:ring-1 hover:ring-border/50"
+        "glass-card rounded-xl p-4 cursor-pointer relative transition-all duration-200 ease-out opacity-0 animate-slide-up group hover:scale-[1.02] hover:shadow-lg hover:bg-secondary/40 hover:z-10",
+        isSelected && "ring-2 ring-primary"
       )}
       style={{ animationDelay: `${delay}ms` }}
     >
@@ -43,7 +43,7 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
             {/* Team Aura */}
             <div
               data-testid="player-team-aura"
-              className="absolute inset-0 rounded-full blur-md opacity-40 animate-pulse"
+              className="absolute inset-0 rounded-full blur-md opacity-50 animate-pulse"
               style={{
                 background: `linear-gradient(135deg, ${primary}, ${secondary})`,
               }}
@@ -96,7 +96,22 @@ export function PlayerCard({ player, isSelected, onClick, delay = 0 }: PlayerCar
           <p className="text-xs text-muted-foreground">{primaryLabel}</p>
         </div>
 
-        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+        <div className="flex items-center gap-2">
+          {onCompare ? (
+            <button
+              type="button"
+              aria-label={`Compare ${player.player_name}`}
+              className="h-9 w-9 rounded-lg border border-border bg-transparent text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCompare?.(player);
+              }}
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+            </button>
+          ) : null}
+          <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+        </div>
       </div>
 
       {isQB ? (
