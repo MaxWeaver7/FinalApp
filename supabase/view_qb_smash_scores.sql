@@ -68,7 +68,7 @@ opponent_pass_defense AS (
     opp_interceptions_forced,
     opp_points_per_game,
     opp_red_zone_scoring_pct,
-    PERCENT_RANK() OVER (ORDER BY opp_passing_yards_per_game DESC) AS pass_def_funnel_percentile,
+    PERCENT_RANK() OVER (ORDER BY opp_passing_yards_per_game ASC) AS pass_def_funnel_percentile,
     PERCENT_RANK() OVER (ORDER BY sacks_generated ASC) AS pass_rush_ease_percentile
   FROM opponent_pass_defense_base
 ),

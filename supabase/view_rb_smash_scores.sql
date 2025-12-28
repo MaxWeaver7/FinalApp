@@ -74,7 +74,7 @@ opponent_run_defense AS (
     opp_points_per_game,
     turnover_differential,
     opp_third_down_pct,
-    PERCENT_RANK() OVER (ORDER BY opp_rushing_yards_per_game DESC) AS run_def_funnel_percentile
+    PERCENT_RANK() OVER (ORDER BY opp_rushing_yards_per_game ASC) AS run_def_funnel_percentile
   FROM opponent_run_defense_base
 ),
 
